@@ -96,8 +96,8 @@ func (l *Logic) newNodes(res naming.Resolver) {
 			totalIPs   int64
 			allIns     []*naming.Instance
 		)
-		for _, zins := range zoneIns.Instances {
-			for _, ins := range zins {
+		for _, zins := range zoneIns.Instances { // 遍历所有机房 zone, 如 sh001, bj001, ...
+			for _, ins := range zins { // 遍历机房中所有实例
 				if ins.Metadata == nil {
 					log.Errorf("node instance metadata is empty(%+v)", ins)
 					continue
@@ -136,7 +136,7 @@ func (l *Logic) onlineproc() {
 			log.Errorf("onlineproc error(%v)", err)
 		}
 	}
-}
+} // 每 10s 汇总一次全局的结果
 
 func (l *Logic) loadOnline() (err error) {
 	var (

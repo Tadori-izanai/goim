@@ -162,7 +162,7 @@ response:
         "heartbeat": 30,    // heartbeat seconds
         "heartbeat_max": 3  // heartbeat tries
         "nodes": [
-            "47.89.10.97"
+            "47.89.10.97"	// web: hostname+domain, others: addr
         ],
         "backoff": {
             "max_delay": 300,

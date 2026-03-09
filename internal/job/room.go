@@ -56,7 +56,7 @@ func (r *Room) Push(op int32, msg []byte) (err error) {
 	return
 }
 
-// pushproc merge proto and push msgs in batch.
+// pushproc merge proto and push msgs in batch. (消息数达到 batch 或者时间超 sigTime 触发推送; 时间超过 sigTime 无消息, 则回收 room)
 func (r *Room) pushproc(batch int, sigTime time.Duration) {
 	var (
 		n    int

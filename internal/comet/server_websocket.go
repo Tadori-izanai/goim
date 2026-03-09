@@ -235,9 +235,9 @@ func (s *Server) ServeWebsocket(conn net.Conn, rp, wp *bytes.Pool, tr *xtime.Tim
 	}
 	// handshake ok start dispatch goroutine
 	step = 5
-	go s.dispatchWebsocket(ws, wp, wb, ch)
+	go s.dispatchWebsocket(ws, wp, wb, ch) // send msg, or read heartbeatReply from ch.CliProto and send it, to web client
 	serverHeartbeat := s.RandServerHearbeat()
-	for {
+	for { // read web client heartbeat, write heartbeatReply msg to ch.CliProto, heartbeat rpc to logic
 		if p, err = ch.CliProto.Set(); err != nil {
 			break
 		}
@@ -288,7 +288,7 @@ func (s *Server) ServeWebsocket(conn net.Conn, rp, wp *bytes.Pool, tr *xtime.Tim
 	tr.Del(trd)
 	ws.Close()
 	ch.Close()
-	rp.Put(rb)
+	rp.Put(rb) // collect a read buffer
 	if err = s.Disconnect(ctx, ch.Mid, ch.Key); err != nil {
 		log.Errorf("key: %s operator do disconnect error(%v)", ch.Key, err)
 	}
@@ -394,7 +394,7 @@ failed:
 		log.Errorf("key: %s dispatch ws error(%v)", ch.Key, err)
 	}
 	ws.Close()
-	wp.Put(wb)
+	wp.Put(wb) // collect a write buffer
 	// must ensure all channel message discard, for reader won't blocking Signal
 	for !finish {
 		finish = (ch.Ready() == protocol.ProtoFinish)

@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package hello;
+
+option go_package = "./hello";
+
+// 定义服务接口
+service Greeter {
+    // 打招呼方法
+    rpc SayHello (HelloRequest) returns (HelloReply);
+
+    // 鉴权方法（类似 goim 的 Connect）
+    rpc Auth (AuthRequest) returns (AuthReply);
+}
+
+// 请求消息
+message HelloRequest {
+    string name = 1;
+}
+
+// 响应消息
+message HelloReply {
+    string message = 1;
+}
+
+// 鉴权请求
+message AuthRequest {
+    string token = 1;
+    int64 user_id = 2;
+}
+
+// 鉴权响应
+message AuthReply {
+    bool success = 1;
+    string session_key = 2;
+}

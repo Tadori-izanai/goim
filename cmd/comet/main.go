@@ -14,13 +14,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/bilibili/discovery/naming"
-	resolver "github.com/bilibili/discovery/naming/grpc"
 	"github.com/Terry-Mao/goim/internal/comet"
 	"github.com/Terry-Mao/goim/internal/comet/conf"
 	"github.com/Terry-Mao/goim/internal/comet/grpc"
 	md "github.com/Terry-Mao/goim/internal/logic/model"
 	"github.com/Terry-Mao/goim/pkg/ip"
+	"github.com/bilibili/discovery/naming"
+	resolver "github.com/bilibili/discovery/naming/grpc"
 	log "github.com/golang/glog"
 )
 
@@ -88,9 +88,9 @@ func register(dis *naming.Discovery, srv *comet.Server) context.CancelFunc {
 	addr := ip.InternalIP()
 	_, port, _ := net.SplitHostPort(conf.Conf.RPCServer.Addr)
 	ins := &naming.Instance{
-		Region:   env.Region,
-		Zone:     env.Zone,
-		Env:      env.DeployEnv,
+		Region:   env.Region,    // sh
+		Zone:     env.Zone,      // sh001
+		Env:      env.DeployEnv, // dev
 		Hostname: env.Host,
 		AppID:    appid,
 		Addrs: []string{
@@ -122,7 +122,7 @@ func register(dis *naming.Discovery, srv *comet.Server) context.CancelFunc {
 			}
 			ins.Metadata[md.MetaConnCount] = fmt.Sprint(conns)
 			ins.Metadata[md.MetaIPCount] = fmt.Sprint(len(ips))
-			if err = dis.Set(ins); err != nil {
+			if err = dis.Set(ins); err != nil { // dis.Set(ins) 更新自己的 metadata (每 10s)
 				log.Errorf("dis.Set(%+v) error(%v)", ins, err)
 				time.Sleep(time.Second)
 				continue
