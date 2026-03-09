@@ -39,7 +39,7 @@ func newProducer(c *conf.Config) (producer Producer) {
 	case conf.MQTypeKafka:
 		producer = NewKafkaProducer(c.Kafka)
 	case conf.MQTypeNats:
-		//todo
+		producer = NewNatsProducer(c.Nats)
 	default:
 		log.Warningf("unknown MQType: %s. Changed to %s.", c.MQType, conf.MQTypeKafka)
 		producer = NewKafkaProducer(c.Kafka)

@@ -1,4 +1,6 @@
 # This is a TOML document. Boom
+MQType = "nats"
+
 [discovery]
     nodes = ["127.0.0.1:7171"]
 
@@ -41,6 +43,10 @@
 [kafka]
     topic = "goim-push-topic"
     brokers = ["127.0.0.1:9092"]
+
+[Nats]
+    Subject = "goim."
+    Addr = "nats://localhost:4222"
 
 [redis]
     network = "tcp"

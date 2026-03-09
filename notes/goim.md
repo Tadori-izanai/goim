@@ -48,9 +48,11 @@ tasks
 ## run
 
 ```sh
-docker pull wurstmeister/kafka:latest
+docker pull zookeeper:latest
 
 docker pull wurstmeister/kafka:latest
+
+docker pull nats:latest
 
 docker run -d --name zookeeper -p 2181:2181 zookeeper
 
@@ -60,6 +62,12 @@ docker run -d --name kafka -p 9092:9092 \
     --env KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://localhost:9092 \
     --env KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:9092 \
     wurstmeister/kafka
+
+docker run -d --name nats \
+    -p 4222:4222 \
+    -p 6222:6222 \
+    -p 8222:8222 \
+    nats:latest
 ```
 
 ```sh

@@ -143,6 +143,8 @@ type Kafka struct {
 }
 
 type Nats struct {
+	Subject string
+	Addr    string
 }
 
 // RPCClient is RPC client config.
