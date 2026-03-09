@@ -2,17 +2,23 @@ package dao
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/Terry-Mao/goim/internal/logic/conf"
+	log "github.com/golang/glog"
 	"github.com/gomodule/redigo/redis"
-	kafka "gopkg.in/Shopify/sarama.v1"
 )
+
+type Producer interface {
+	ProduceMessage(key string, msg []byte) error
+	Close() error
+}
 
 // Dao dao.
 type Dao struct {
 	c           *conf.Config
-	kafkaPub    kafka.SyncProducer
+	producer    Producer
 	redis       *redis.Pool
 	redisExpire int32
 }
@@ -21,23 +27,24 @@ type Dao struct {
 func New(c *conf.Config) *Dao {
 	d := &Dao{
 		c:           c,
-		kafkaPub:    newKafkaPub(c.Kafka),
+		producer:    newProducer(c),
 		redis:       newRedis(c.Redis),
 		redisExpire: int32(time.Duration(c.Redis.Expire) / time.Second),
 	}
 	return d
 }
 
-func newKafkaPub(c *conf.Kafka) kafka.SyncProducer {
-	kc := kafka.NewConfig()
-	kc.Producer.RequiredAcks = kafka.WaitForAll // Wait for all in-sync replicas to ack the message
-	kc.Producer.Retry.Max = 10                  // Retry up to 10 times to produce the message
-	kc.Producer.Return.Successes = true
-	pub, err := kafka.NewSyncProducer(c.Brokers, kc)
-	if err != nil {
-		panic(err)
+func newProducer(c *conf.Config) (producer Producer) {
+	switch c.MQType {
+	case conf.MQTypeKafka:
+		producer = NewKafkaProducer(c.Kafka)
+	case conf.MQTypeNats:
+		//todo
+	default:
+		log.Warningf("unknown MQType: %s. Changed to %s.", c.MQType, conf.MQTypeKafka)
+		producer = NewKafkaProducer(c.Kafka)
 	}
-	return pub
+	return
 }
 
 func newRedis(c *conf.Redis) *redis.Pool {
@@ -62,7 +69,9 @@ func newRedis(c *conf.Redis) *redis.Pool {
 
 // Close close the resource.
 func (d *Dao) Close() error {
-	return d.redis.Close()
+	errMQ := d.producer.Close()
+	errRedis := d.redis.Close()
+	return errors.Join(errMQ, errRedis)
 }
 
 // Ping dao ping.

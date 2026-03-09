@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/bilibili/discovery/naming"
 	xtime "github.com/Terry-Mao/goim/pkg/time"
+	"github.com/bilibili/discovery/naming"
 
 	"github.com/BurntSushi/toml"
 )
@@ -67,8 +67,15 @@ func Default() *Config {
 			KeepAliveTimeout:  xtime.Duration(time.Second * 20),
 		},
 		Backoff: &Backoff{MaxDelay: 300, BaseDelay: 3, Factor: 1.8, Jitter: 1.3},
+		MQType:  MQTypeKafka,
 	}
 }
+
+// MQ type constants.
+const (
+	MQTypeKafka = "kafka"
+	MQTypeNats  = "nats"
+)
 
 // Config config.
 type Config struct {
@@ -77,7 +84,9 @@ type Config struct {
 	RPCClient  *RPCClient
 	RPCServer  *RPCServer
 	HTTPServer *HTTPServer
+	MQType     string
 	Kafka      *Kafka
+	Nats       *Nats
 	Redis      *Redis
 	Node       *Node
 	Backoff    *Backoff
@@ -131,6 +140,9 @@ type Redis struct {
 type Kafka struct {
 	Topic   string
 	Brokers []string
+}
+
+type Nats struct {
 }
 
 // RPCClient is RPC client config.
