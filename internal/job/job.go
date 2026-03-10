@@ -66,6 +66,7 @@ func (j *Job) Consume() {
 		panic("consumer is nil")
 	}
 	j.consumer.Consume(func(msg []byte) {
+		ConsumeMessagesTotal.Inc()
 		pushMsg := new(pb.PushMsg)
 		if err := proto.Unmarshal(msg, pushMsg); err != nil {
 			log.Errorf("proto.Unmarshal error(%v)", err)

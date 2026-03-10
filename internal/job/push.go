@@ -3,6 +3,7 @@ package job
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/Terry-Mao/goim/api/comet"
 	pb "github.com/Terry-Mao/goim/api/logic"
@@ -12,6 +13,7 @@ import (
 )
 
 func (j *Job) push(ctx context.Context, pushMsg *pb.PushMsg) (err error) {
+	start := time.Now()
 	switch pushMsg.Type {
 	case pb.PushMsg_PUSH:
 		err = j.pushKeys(pushMsg.Operation, pushMsg.Server, pushMsg.Keys, pushMsg.Msg)
@@ -22,6 +24,7 @@ func (j *Job) push(ctx context.Context, pushMsg *pb.PushMsg) (err error) {
 	default:
 		err = fmt.Errorf("no match push type: %s", pushMsg.Type)
 	}
+	PushDurationSeconds.Observe(time.Since(start).Seconds())
 	return
 }
 

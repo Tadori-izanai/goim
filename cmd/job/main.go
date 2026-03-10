@@ -29,6 +29,7 @@ func main() {
 	resolver.Register(dis)
 	// job
 	j := job.New(conf.Conf)
+	job.InitMetrics(":9101")
 	go j.Consume()
 	// signal
 	c := make(chan os.Signal, 1)
