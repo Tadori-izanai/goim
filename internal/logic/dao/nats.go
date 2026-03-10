@@ -24,7 +24,7 @@ func NewNatsProducer(c *conf.Nats) *NatsProducer {
 }
 
 func (p *NatsProducer) ProduceMessage(key string, msg []byte) error {
-	return p.conn.Publish(p.c.Subject+key, msg)
+	return p.conn.Publish(p.c.Subject, msg)
 }
 
 func (p *NatsProducer) Close() error {

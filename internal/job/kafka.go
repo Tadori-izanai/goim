@@ -29,7 +29,7 @@ func newKafkaSub(c *conf.Kafka) *cluster.Consumer {
 	return consumer
 }
 
-func (c *KafkaConsumer) Consume(handler func(key string, value []byte)) {
+func (c *KafkaConsumer) Consume(handler func(msg []byte)) {
 	for {
 		select {
 		case err := <-c.consumer.Errors():
@@ -41,7 +41,7 @@ func (c *KafkaConsumer) Consume(handler func(key string, value []byte)) {
 				return
 			}
 			c.consumer.MarkOffset(msg, "")
-			handler(string(msg.Key), msg.Value)
+			handler(msg.Value)
 			log.Infof("consume: %s/%d/%d\t%s", msg.Topic, msg.Partition, msg.Offset, msg.Key)
 		}
 	}

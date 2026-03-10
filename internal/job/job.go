@@ -14,7 +14,7 @@ import (
 )
 
 type Consumer interface {
-	Consume(handler func(key string, value []byte))
+	Consume(handler func(msg []byte))
 	Close() error
 }
 
@@ -44,7 +44,7 @@ func newConsumer(c *conf.Config) (consumer Consumer) {
 	case conf.MQTypeKafka:
 		consumer = NewKafkaConsumer(c.Kafka)
 	case conf.MQTypeNats:
-		// todo
+		consumer = NewNatsConsumer(c.Nats)
 	default:
 		log.Warningf("unknown MQType: %s. Changed to %s.", c.MQType, conf.MQTypeKafka)
 		consumer = NewKafkaConsumer(c.Kafka)
@@ -65,16 +65,15 @@ func (j *Job) Consume() {
 	if j.consumer == nil {
 		panic("consumer is nil")
 	}
-	j.consumer.Consume(func(key string, value []byte) {
+	j.consumer.Consume(func(msg []byte) {
 		pushMsg := new(pb.PushMsg)
-		if err := proto.Unmarshal(value, pushMsg); err != nil {
+		if err := proto.Unmarshal(msg, pushMsg); err != nil {
 			log.Errorf("proto.Unmarshal error(%v)", err)
 			return
 		}
 		if err := j.push(context.Background(), pushMsg); err != nil {
 			log.Errorf("j.push(%v) error(%v)", pushMsg, err)
 		}
-		log.Infof("consume key:%s msg:%+v", key, pushMsg)
 	})
 }
 

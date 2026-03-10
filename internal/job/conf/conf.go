@@ -64,6 +64,7 @@ type Config struct {
 	Env       *Env
 	MQType    string
 	Kafka     *Kafka
+	Nats      *Nats
 	Discovery *naming.Config
 	Comet     *Comet
 	Room      *Room
@@ -90,6 +91,8 @@ type Kafka struct {
 }
 
 type Nats struct {
+	Subject string
+	Addr    string
 }
 
 // Env is env config.
