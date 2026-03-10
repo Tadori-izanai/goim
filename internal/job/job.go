@@ -9,16 +9,19 @@ import (
 	pb "github.com/Terry-Mao/goim/api/logic"
 	"github.com/Terry-Mao/goim/internal/job/conf"
 	"github.com/bilibili/discovery/naming"
-	"github.com/golang/protobuf/proto"
-
-	cluster "github.com/bsm/sarama-cluster"
 	log "github.com/golang/glog"
+	"github.com/golang/protobuf/proto"
 )
+
+type Consumer interface {
+	Consume(handler func(key string, value []byte))
+	Close() error
+}
 
 // Job is push job.
 type Job struct {
 	c            *conf.Config
-	consumer     *cluster.Consumer
+	consumer     Consumer
 	cometServers map[string]*Comet
 
 	rooms      map[string]*Room
@@ -29,22 +32,24 @@ type Job struct {
 func New(c *conf.Config) *Job {
 	j := &Job{
 		c:        c,
-		consumer: newKafkaSub(c.Kafka),
+		consumer: newConsumer(c),
 		rooms:    make(map[string]*Room),
 	}
 	j.watchComet(c.Discovery)
 	return j
 }
 
-func newKafkaSub(c *conf.Kafka) *cluster.Consumer {
-	config := cluster.NewConfig()
-	config.Consumer.Return.Errors = true
-	config.Group.Return.Notifications = true
-	consumer, err := cluster.NewConsumer(c.Brokers, c.Group, []string{c.Topic}, config)
-	if err != nil {
-		panic(err)
+func newConsumer(c *conf.Config) (consumer Consumer) {
+	switch c.MQType {
+	case conf.MQTypeKafka:
+		consumer = NewKafkaConsumer(c.Kafka)
+	case conf.MQTypeNats:
+		// todo
+	default:
+		log.Warningf("unknown MQType: %s. Changed to %s.", c.MQType, conf.MQTypeKafka)
+		consumer = NewKafkaConsumer(c.Kafka)
 	}
-	return consumer
+	return
 }
 
 // Close close resounces.
@@ -57,29 +62,20 @@ func (j *Job) Close() error {
 
 // Consume messages, watch signals
 func (j *Job) Consume() {
-	for {
-		select {
-		case err := <-j.consumer.Errors():
-			log.Errorf("consumer error(%v)", err)
-		case n := <-j.consumer.Notifications():
-			log.Infof("consumer rebalanced(%v)", n)
-		case msg, ok := <-j.consumer.Messages():
-			if !ok {
-				return
-			}
-			j.consumer.MarkOffset(msg, "")
-			// process push message
-			pushMsg := new(pb.PushMsg)
-			if err := proto.Unmarshal(msg.Value, pushMsg); err != nil {
-				log.Errorf("proto.Unmarshal(%v) error(%v)", msg, err)
-				continue
-			}
-			if err := j.push(context.Background(), pushMsg); err != nil {
-				log.Errorf("j.push(%v) error(%v)", pushMsg, err)
-			}
-			log.Infof("consume: %s/%d/%d\t%s\t%+v", msg.Topic, msg.Partition, msg.Offset, msg.Key, pushMsg)
-		}
+	if j.consumer == nil {
+		panic("consumer is nil")
 	}
+	j.consumer.Consume(func(key string, value []byte) {
+		pushMsg := new(pb.PushMsg)
+		if err := proto.Unmarshal(value, pushMsg); err != nil {
+			log.Errorf("proto.Unmarshal error(%v)", err)
+			return
+		}
+		if err := j.push(context.Background(), pushMsg); err != nil {
+			log.Errorf("j.push(%v) error(%v)", pushMsg, err)
+		}
+		log.Infof("consume key:%s msg:%+v", key, pushMsg)
+	})
 }
 
 func (j *Job) watchComet(c *naming.Config) {

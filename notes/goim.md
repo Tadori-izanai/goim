@@ -132,3 +132,4 @@ websocket api
 
 <img src="./goim.assets/image-20260308195501530.png" alt="image-20260308195501530" style="zoom:50%;" />
 
+ dao.go 通过 switch c.MQType 做工厂选择，调用方（produce.go）完全不感知具体实现

@@ -5,9 +5,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/bilibili/discovery/naming"
 	"github.com/BurntSushi/toml"
 	xtime "github.com/Terry-Mao/goim/pkg/time"
+	"github.com/bilibili/discovery/naming"
 )
 
 var (
@@ -49,12 +49,20 @@ func Default() *Config {
 			Signal: xtime.Duration(time.Second),
 			Idle:   xtime.Duration(time.Minute * 15),
 		},
+		MQType: MQTypeKafka,
 	}
 }
+
+// MQ type constants.
+const (
+	MQTypeKafka = "kafka"
+	MQTypeNats  = "nats"
+)
 
 // Config is job config.
 type Config struct {
 	Env       *Env
+	MQType    string
 	Kafka     *Kafka
 	Discovery *naming.Config
 	Comet     *Comet
@@ -79,6 +87,9 @@ type Kafka struct {
 	Topic   string
 	Group   string
 	Brokers []string
+}
+
+type Nats struct {
 }
 
 // Env is env config.
