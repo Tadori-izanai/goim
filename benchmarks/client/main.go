@@ -101,7 +101,7 @@ func client(mid int64) {
 }
 
 func startClient(key int64) {
-	time.Sleep(time.Duration(rand.Intn(120)) * time.Second)
+	time.Sleep(time.Duration(rand.Intn(12)) * time.Second) // 120
 	atomic.AddInt64(&aliveCount, 1)
 	quit := make(chan bool, 1)
 	defer func() {

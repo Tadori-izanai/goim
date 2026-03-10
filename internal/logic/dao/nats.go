@@ -1,12 +1,16 @@
 package dao
 
 import (
+	"context"
+
 	"github.com/Terry-Mao/goim/internal/logic/conf"
 	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 )
 
 type NatsProducer struct {
 	conn *nats.Conn
+	js   jetstream.JetStream
 	c    *conf.Nats
 }
 
@@ -17,14 +21,20 @@ func NewNatsProducer(c *conf.Nats) *NatsProducer {
 	if err != nil {
 		panic(err)
 	}
+	js, err := jetstream.New(nc)
+	if err != nil {
+		panic(err)
+	}
 	return &NatsProducer{
 		conn: nc,
+		js:   js,
 		c:    c,
 	}
 }
 
 func (p *NatsProducer) ProduceMessage(key string, msg []byte) error {
-	return p.conn.Publish(p.c.Subject, msg)
+	_, err := p.js.Publish(context.Background(), p.c.Subject, msg)
+	return err
 }
 
 func (p *NatsProducer) Close() error {
