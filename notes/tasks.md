@@ -13,13 +13,13 @@
 ## 阶段二：goim 改造
 
 ### 替换 MQ（Kafka → NATS）
-- [ ] 用 interface 抽象 MQ 的 Publish / Subscribe 行为，解耦 Kafka 强依赖
-- [ ] 实现 NATS 适配器（Publisher + Consumer）
-- [ ] 替换 Logic 发布消息、Job 消费消息的实现
+- [x] 用 interface 抽象 MQ 的 Publish / Subscribe 行为，解耦 Kafka 强依赖
+- [x] 实现 NATS 适配器（Publisher + Consumer）
+- [x] 替换 Logic 发布消息、Job 消费消息的实现
 
 ### 本地功能验证（替换后跑通）
-- [ ] 编译压测工具（client / push / push_room）
-- [ ] 小参数验证：500 连接 + 10 条/秒，确认 down/s > 0，链路跑通
+- [x] 编译压测工具（client / push / push_room）
+- [x] 小参数验证：500 连接 + 10 条/秒，确认 down/s > 0，链路跑通
 
 ### 接入 Prometheus 监控
 - [ ] Comet：在线连接数、消息推送量、消息丢弃数

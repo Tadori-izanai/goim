@@ -130,6 +130,9 @@ func (s *Server) ServeTCP(conn *net.TCPConn, rp, wp *bytes.Pool, tr *xtime.Timer
 			ch.Watch(accepts...)
 			b = s.Bucket(ch.Key)
 			err = b.Put(rid, ch)
+			if err == nil {
+				OnlineConnections.Inc()
+			}
 			if conf.Conf.Debug {
 				log.Infof("tcp connnected key:%s mid:%d proto:%+v", ch.Key, ch.Mid, p)
 			}
@@ -202,6 +205,7 @@ func (s *Server) ServeTCP(conn *net.TCPConn, rp, wp *bytes.Pool, tr *xtime.Timer
 		log.Errorf("key: %s server tcp failed error(%v)", ch.Key, err)
 	}
 	b.Del(ch)
+	OnlineConnections.Dec()
 	tr.Del(trd)
 	rp.Put(rb)
 	conn.Close()

@@ -43,6 +43,7 @@ func main() {
 	resolver.Register(dis)
 	// new comet server
 	srv := comet.NewServer(conf.Conf)
+	comet.InitMetrics(":9100")
 	if err := comet.InitWhitelist(conf.Conf.Whitelist); err != nil {
 		panic(err)
 	}

@@ -211,6 +211,9 @@ func (s *Server) ServeWebsocket(conn net.Conn, rp, wp *bytes.Pool, tr *xtime.Tim
 			ch.Watch(accepts...)
 			b = s.Bucket(ch.Key)
 			err = b.Put(rid, ch)
+			if err == nil {
+				OnlineConnections.Inc()
+			}
 			if conf.Conf.Debug {
 				log.Infof("websocket connected key:%s mid:%d proto:%+v", ch.Key, ch.Mid, p)
 			}
@@ -285,6 +288,7 @@ func (s *Server) ServeWebsocket(conn net.Conn, rp, wp *bytes.Pool, tr *xtime.Tim
 		log.Errorf("key: %s server ws failed error(%v)", ch.Key, err)
 	}
 	b.Del(ch)
+	OnlineConnections.Dec()
 	tr.Del(trd)
 	ws.Close()
 	ch.Close()

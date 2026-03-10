@@ -60,6 +60,7 @@ func (s *server) PushMsg(ctx context.Context, req *pb.PushMsgReq) (reply *pb.Pus
 			if err = channel.Push(req.Proto); err != nil {
 				return
 			}
+			comet.PushMessagesTotal.Inc()
 		}
 	}
 	return &pb.PushMsgReply{}, nil
@@ -70,6 +71,7 @@ func (s *server) Broadcast(ctx context.Context, req *pb.BroadcastReq) (*pb.Broad
 	if req.Proto == nil {
 		return nil, errors.ErrBroadCastArg
 	}
+	comet.PushMessagesTotal.Inc()
 	// TODO use broadcast queue
 	go func() {
 		for _, bucket := range s.srv.Buckets() {
@@ -88,6 +90,7 @@ func (s *server) BroadcastRoom(ctx context.Context, req *pb.BroadcastRoomReq) (*
 	if req.Proto == nil || req.RoomID == "" {
 		return nil, errors.ErrBroadCastRoomArg
 	}
+	comet.PushMessagesTotal.Inc()
 	for _, bucket := range s.srv.Buckets() {
 		bucket.BroadcastRoom(req)
 	}
