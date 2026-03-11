@@ -23,8 +23,8 @@
 
 ### 接入 Prometheus 监控
 - [x] Comet：在线连接数、消息推送量、消息丢弃数
-- [ ] Job：MQ 消费速率、推送延迟
-- [ ] 暴露 /metrics 端点
+- [x] Job：MQ 消费速率、推送延迟
+- [x] 暴露 /metrics 端点
 
 > **注**：保留 bilibili/discovery，不做移除。保留 TCP 协议，压测工具依赖 TCP 客户端。
 
