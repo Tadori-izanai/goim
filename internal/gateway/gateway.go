@@ -6,21 +6,21 @@ import (
 	log "github.com/golang/glog"
 )
 
-type Server struct {
+type Gateway struct {
 	c   *conf.Config
 	dao *dao.Dao
 }
 
-func New(c *conf.Config) *Server {
-	s := &Server{
+func New(c *conf.Config) *Gateway {
+	g := &Gateway{
 		c:   c,
 		dao: dao.New(c),
 	}
-	return s
+	return g
 }
 
-func (s *Server) Close() {
-	if err := s.dao.Close(); err != nil {
+func (g *Gateway) Close() {
+	if err := g.dao.Close(); err != nil {
 		log.Errorf("close dao error: %v", err)
 	}
 }

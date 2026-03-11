@@ -116,15 +116,37 @@ GORM AutoMigrate 自动建表。
 
 初期不需要 Redis，配置预留但不初始化。
 
-### 4. API 接口
+### 4. Gateway 接口
 
-| 接口 | 请求 | 响应 |
-|------|------|------|
-| `POST /api/register` | `{"username":"xxx","password":"xxx"}` | `{"code":0}` |
-| `POST /api/login` | `{"username":"xxx","password":"xxx"}` | `{"code":0,"data":{"token":"eyJ...","nodes":["10.0.0.1"],"ws_port":3102,"heartbeat":240}}` |
+**POST /goim/auth/register**
 
-注册：bcrypt 加密密码 → 存 MySQL
-登录：查用户 → bcrypt 比对 → 生成 JWT → 调 Logic `/goim/nodes/weighted` 获取 comet 节点 → 一起返回
+请求：`{"username":"xxx","password":"xxx"}`
+响应：`{"code":0}`
+
+**POST /goim/auth/login**
+
+请求：`{"username":"xxx","password":"xxx"}`
+响应：
+```json
+{
+  "code": 0,
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIs...",
+    "nodes": {
+      "domain": "conn.goim.io",
+      "tcp_port": 3101,
+      "ws_port": 3102,
+      "wss_port": 3103,
+      "heartbeat": 240,
+      "heartbeat_max": 2,
+      "nodes": ["127.0.0.1"]
+    }
+  }
+}
+```
+
+- 注册：bcrypt 加密密码 → 存 MySQL
+- 登录：查用户 → bcrypt 比对 → 生成 JWT → 调 Logic `GET /goim/nodes/weighted` 获取 comet 节点 → 一起返回
 
 ### 5. Logic Connect() 改造
 
@@ -181,12 +203,12 @@ api:
 make gateway
 
 # 3. 注册用户
-curl -X POST http://localhost:3200/api/register \
+curl -X POST http://localhost:3200/goim/api/register \
   -H 'Content-Type: application/json' \
   -d '{"username":"test","password":"123456"}'
 
 # 4. 登录获取 token
-curl -X POST http://localhost:3200/api/login \
+curl -X POST http://localhost:3200/goim/api/login \
   -H 'Content-Type: application/json' \
   -d '{"username":"test","password":"123456"}'
 # 返回: {"code":0,"data":{"token":"eyJ..."}}

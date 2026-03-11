@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"github.com/Terry-Mao/goim/internal/gateway"
+	"github.com/Terry-Mao/goim/internal/gateway/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -20,9 +21,8 @@ func main() {
 	log.Infof("goim-api [addr: %s] start", conf.Conf.HTTPServer.Addr)
 
 	srv := gateway.New(conf.Conf)
-	defer srv.Close()
+	httpSrv := http.New(conf.Conf.HTTPServer, srv)
 
-	// TODO: service + http server
 	// signal
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT)
@@ -32,6 +32,7 @@ func main() {
 		switch s {
 		case syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT:
 			srv.Close()
+			httpSrv.Close()
 			log.Infof("goim-api exit")
 			log.Flush()
 			return
