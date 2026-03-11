@@ -85,7 +85,7 @@ func ParseToken(secret string, tokenStr string) (*Claims, error)
 ### 2. 数据库 — users 表
 
 ```go
-// internal/api/model/user.go
+// internal/gateway/model/user.go
 type User struct {
     ID        int64  `gorm:"primaryKey;autoIncrement"`
     Username  string `gorm:"uniqueIndex;size:64;not null"`
@@ -153,7 +153,7 @@ Logic `Connect()` 改为：
 cp cmd/api/api-example.toml target/api.toml
 $(GOBUILD) -o target/api cmd/api/main.go
 
-# 新增 api 单独运行目标：
+# 新增 gateway 单独运行目标：
 api:
 	target/api -conf=target/api.toml -alsologtostderr 2>&1 | tee target/api.log
 ```
@@ -178,7 +178,7 @@ api:
 ```bash
 # 1. 启动 MySQL、确保 goim 全套运行
 # 2. 启动 API 服务
-make api
+make gateway
 
 # 3. 注册用户
 curl -X POST http://localhost:3200/api/register \

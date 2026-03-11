@@ -68,6 +68,16 @@ docker run -d --name nats \
     -p 6222:6222 \
     -p 8222:8222 \
     nats:latest --jetstream
+    
+##
+
+docker run -d --name mysql \
+    -p 3306:3306 \
+    -e MYSQL_ROOT_PASSWORD=password \
+    -e MYSQL_DATABASE=goim \
+    mysql:latest
+
+docker exec -it mysql mysql -uroot -ppassword -e "SHOW DATABASES;"
 ```
 
 ```sh

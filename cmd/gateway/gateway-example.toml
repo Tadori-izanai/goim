@@ -1,0 +1,13 @@
+# This is a TOML document. Boom
+[httpServer]
+    addr = ":3200"
+
+[mysql]
+    dsn = "root:password@tcp(127.0.0.1:3306)/goim?charset=utf8mb4&parseTime=True&loc=Local"
+
+[jwt]
+    secret = "your-jwt-secret-change-me"
+    expireHours = 24
+
+[logic]
+    addr = "http://localhost:3111"
