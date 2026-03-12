@@ -58,10 +58,10 @@ internal/api/
 
 | 文件 | 改动 |
 |------|------|
-| `internal/logic/conf/conf.go` | Config 加 `JWTSecret string` |
-| `cmd/logic/logic-example.toml` | 加 `jwtSecret = "..."` |
-| `internal/logic/conn.go` | `Connect()` 改为 JWT 验证 |
-| `Makefile` | 加 api 构建/运行目标 |
+| `internal/comet/conf/conf.go` | Config 加 `JWTSecret string` |
+| `cmd/comet/comet-example.toml` | 加 `jwtSecret = "..."` |
+| `internal/comet/operation.go` | `Connect()` 中 JWT 验证 + body 重构 |
+| `Makefile` | 加 gateway 构建/运行目标（已完成） |
 
 ## 实现细节
 
@@ -138,8 +138,14 @@ GORM AutoMigrate 自动建表。
       "ws_port": 3102,
       "wss_port": 3103,
       "heartbeat": 240,
+      "nodes": ["127.0.0.1"],
+      "backoff": {
+        "max_delay": 300,
+        "base_delay": 3,
+        "factor": 1.8,
+        "jitter": 0.3
+      },
       "heartbeat_max": 2,
-      "nodes": ["127.0.0.1"]
     }
   }
 }
@@ -148,7 +154,9 @@ GORM AutoMigrate 自动建表。
 - 注册：bcrypt 加密密码 → 存 MySQL
 - 登录：查用户 → bcrypt 比对 → 生成 JWT → 调 Logic `GET /goim/nodes/weighted` 获取 comet 节点 → 一起返回
 
-### 5. Logic Connect() 改造
+### 5. Comet JWT 验证（替代原方案中的 Logic Connect 改造）
+
+JWT 验证放在 Comet 而非 Logic。Comet 解析 JWT 后重构 body，Logic 收到的数据格式不变。
 
 客户端 auth body 从原来的：
 ```json
@@ -160,13 +168,18 @@ GORM AutoMigrate 自动建表。
 {"token": "eyJ...", "room_id": "test://1", "platform": "web", "accepts": [1000]}
 ```
 
-Logic `Connect()` 改为：
-1. JSON 解析外层 → 拿到 `token` 字符串 + `room_id`/`platform`/`accepts`
+Comet `operation.go` 的 `Connect()` 中：
+1. JSON 解析 `p.Body` → 拿到 `token` 字符串 + `room_id`/`platform`/`accepts`
 2. `auth.ParseToken(secret, token)` → 验证 JWT、提取 `mid`
-3. `key` 始终服务端生成（UUID），防止客户端伪造
-4. 其余逻辑不变（AddMapping 等）
+3. 重构 body 为 `{"mid": <从JWT>, "room_id": ..., "platform": ..., "accepts": ...}`
+4. 替换 `p.Body`，继续调用 Logic gRPC → **Logic 代码零改动**
 
-参考文件：`internal/logic/conn.go`（当前实现），已用 `github.com/google/uuid`。
+需要改的文件：
+- `internal/comet/conf/conf.go` — Config 加 `JWTSecret string`
+- `cmd/comet/comet-example.toml` — 加 `jwtSecret = "..."`
+- `internal/comet/operation.go` — `Connect()` 中加 JWT 解析和 body 重构
+
+**不需要改的文件：Logic 全部不改、Proto 不改。**
 
 ### 6. Makefile
 
@@ -182,18 +195,18 @@ api:
 
 ## 实现顺序
 
-1. `pkg/auth/jwt.go` — 无外部依赖，先写好
-2. `go get` 新依赖：`golang-jwt/jwt/v4`、`gorm.io/gorm`、`gorm.io/driver/mysql`
-3. `internal/api/model/user.go`
-4. `internal/api/conf/conf.go`
-5. `internal/api/dao/dao.go` + `dao/user.go`
-6. `internal/api/service/service.go` + `service/auth.go`
-7. `internal/api/http/` (server, auth, middleware, result)
-8. `cmd/api/api-example.toml` + `cmd/api/main.go`
-9. `internal/logic/conf/conf.go` — 加 JWTSecret
-10. `cmd/logic/logic-example.toml` — 加 jwtSecret
-11. `internal/logic/conn.go` — Connect() JWT 验证
-12. `Makefile` 更新
+1. ~~`pkg/auth/jwt.go`~~ ✅
+2. ~~`go get` 新依赖~~ ✅
+3. ~~`internal/gateway/model/user.go`~~ ✅
+4. ~~`internal/gateway/conf/conf.go`~~ ✅
+5. ~~`internal/gateway/dao/dao.go` + `dao/user.go`~~ ✅
+6. `internal/gateway/auth.go` — Register ✅ / Login（进行中）
+7. ~~`internal/gateway/http/`~~ ✅
+8. ~~`cmd/gateway/gateway-example.toml` + `cmd/gateway/main.go`~~ ✅
+9. `internal/comet/conf/conf.go` — 加 JWTSecret
+10. `cmd/comet/comet-example.toml` — 加 jwtSecret
+11. `internal/comet/operation.go` — Connect() JWT 验证 + body 重构
+12. ~~`Makefile` 更新~~ ✅
 
 ## 验证方式
 
@@ -203,12 +216,12 @@ api:
 make gateway
 
 # 3. 注册用户
-curl -X POST http://localhost:3200/goim/api/register \
+curl -X POST http://localhost:3200/goim/auth/register \
   -H 'Content-Type: application/json' \
   -d '{"username":"test","password":"123456"}'
 
 # 4. 登录获取 token
-curl -X POST http://localhost:3200/goim/api/login \
+curl -X POST http://localhost:3200/goim/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"username":"test","password":"123456"}'
 # 返回: {"code":0,"data":{"token":"eyJ..."}}

@@ -32,3 +32,8 @@ func (d *Dao) Close() error {
 	}
 	return sqlDB.Close()
 }
+
+// Exec executes raw SQL (for tests and migrations).
+func (d *Dao) Exec(sql string) {
+	d.db.Exec(sql)
+}

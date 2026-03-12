@@ -21,7 +21,7 @@ type resp struct {
 	Data    any    `json:"data,omitempty"`
 }
 
-func errors(c *gin.Context, code int, msg string) {
+func errors_(c *gin.Context, code int, msg string) {
 	c.Set(contextErrCode, code)
 	c.JSON(200, resp{
 		Code:    code,
