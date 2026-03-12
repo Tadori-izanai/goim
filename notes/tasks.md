@@ -37,8 +37,8 @@
 - [x] 搭建 Gin + GORM 骨架，连接 MySQL 和 Redis
 - [x] 数据库设计：`users` 表
 - [x] 注册 / 登录接口（返回 JWT Token）
-- [ ] Comet WebSocket 握手时读取 Token（URL 参数或 Header）
-- [ ] Comet 验证 JWT，解析出用户 ID
+- [x] Comet WebSocket 握手时读取 Token（URL 参数或 Header）
+- [x] Comet 验证 JWT，解析出用户 ID
 
 ---
 

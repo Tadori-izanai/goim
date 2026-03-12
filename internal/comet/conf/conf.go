@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bilibili/discovery/naming"
 	"github.com/BurntSushi/toml"
 	xtime "github.com/Terry-Mao/goim/pkg/time"
+	"github.com/bilibili/discovery/naming"
 )
 
 var (
@@ -102,6 +102,10 @@ func Default() *Config {
 			RoutineAmount: 32,
 			RoutineSize:   1024,
 		},
+		JWT: &JWT{
+			Secret:      "change-me",
+			ExpireHours: 24,
+		},
 	}
 }
 
@@ -117,6 +121,7 @@ type Config struct {
 	RPCClient *RPCClient
 	RPCServer *RPCServer
 	Whitelist *Whitelist
+	JWT       *JWT
 }
 
 // Env is env config.
@@ -193,4 +198,10 @@ type Bucket struct {
 type Whitelist struct {
 	Whitelist []int64
 	WhiteLog  string
+}
+
+// JWT is jwt config.
+type JWT struct {
+	Secret      string
+	ExpireHours int
 }

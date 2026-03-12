@@ -420,6 +420,10 @@ func (s *Server) authWebsocket(ctx context.Context, ws *websocket.Conn, p *proto
 			log.Errorf("ws request operation(%d) not auth", p.Op)
 		}
 	}
+	if p.Body, err = processAuthBody(s.c.JWT.Secret, p.Body); err != nil {
+		log.Errorf("ws processAuthBody error(%v)", err)
+		return
+	}
 	if mid, key, rid, accepts, hb, err = s.Connect(ctx, p, cookie); err != nil {
 		return
 	}

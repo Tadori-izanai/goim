@@ -46,3 +46,7 @@
     room = 1024
     routineAmount = 32
     routineSize = 1024
+
+[jwt]
+    secret = "your-jwt-secret-change-me"
+    expireHours = 24

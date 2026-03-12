@@ -7,15 +7,18 @@ require (
 	github.com/bilibili/discovery v1.0.1
 	github.com/bsm/sarama-cluster v2.1.15+incompatible
 	github.com/gin-gonic/gin v1.7.0
+	github.com/go-sql-driver/mysql v1.8.1
 	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
 	github.com/golang/protobuf v1.5.0
 	github.com/gomodule/redigo v2.0.0+incompatible
 	github.com/google/uuid v1.0.0
+	github.com/gorilla/websocket v1.5.3
 	github.com/nats-io/nats.go v1.49.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/stretchr/testify v1.11.1
 	github.com/zhenjl/cityhash v0.0.0-20131128155616-cdd6a94144ab
+	golang.org/x/crypto v0.46.0
 	golang.org/x/net v0.47.0
 	google.golang.org/grpc v1.22.3
 	gopkg.in/Shopify/sarama.v1 v1.19.0
@@ -37,7 +40,6 @@ require (
 	github.com/go-playground/locales v0.13.0 // indirect
 	github.com/go-playground/universal-translator v0.17.0 // indirect
 	github.com/go-playground/validator/v10 v10.4.1 // indirect
-	github.com/go-sql-driver/mysql v1.8.1 // indirect
 	github.com/golang/snappy v0.0.0-20180518054509-2e65f85255db // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
@@ -62,7 +64,6 @@ require (
 	github.com/smartystreets/assertions v0.0.0-20180927180507-b2de0cb4f26d // indirect
 	github.com/ugorji/go/codec v1.1.7 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
-	golang.org/x/crypto v0.46.0 // indirect
 	golang.org/x/sys v0.39.0 // indirect
 	golang.org/x/text v0.32.0 // indirect
 	google.golang.org/genproto v0.0.0-20180817151627-c66870c02cf8 // indirect
