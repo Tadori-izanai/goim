@@ -47,7 +47,7 @@ func (s *Server) initRouter() {
 	groupFriend := s.engine.Group("/goim/friend")
 	groupFriend.Use(jwtHandler)
 	{
-		groupFriend.POST("", s.addFriend)
+		groupFriend.POST("/:friend_id", s.addFriend)
 		groupFriend.DELETE("/:friend_id", s.removeFriend)
 		groupFriend.GET("", s.listFriend)
 	}
@@ -58,5 +58,4 @@ func (s *Server) initRouter() {
 		groupChat.POST("", s.sendMessage)
 		groupChat.GET("", s.historyMessage)
 	}
-
 }

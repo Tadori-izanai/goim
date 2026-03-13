@@ -95,22 +95,22 @@ func (s *Server) authMiddleware() gin.HandlerFunc {
 
 | 接口 | 方法 | 说明 |
 |------|------|------|
-| `/goim/friend/add` | POST | 添加好友 |
-| `/goim/friend/remove` | POST | 删除好友 |
-| `/goim/friend/list` | GET | 好友列表 |
+| `/goim/friend/:friend_id` | POST | 添加好友 |
+| `/goim/friend/:friend_id` | DELETE | 删除好友 |
+| `/goim/friend` | GET | 好友列表 |
 
-**POST /goim/friend/add**
+**POST /goim/friend/:friend_id**
 
-请求：`{"friend_id": 456}`
+`friend_id` 从 URL 路径获取，无需 request body。
 响应：`{"code": 0}`
 
 - 双向插入 `(mid, friend_id)` 和 `(friend_id, mid)`
 - 已存在则忽略（幂等）
 - 需要校验 friend_id 用户是否存在
 
-**POST /goim/friend/remove**
+**DELETE /goim/friend/:friend_id**
 
-请求：`{"friend_id": 456}`
+`friend_id` 从 URL 路径获取，无需 request body。
 响应：`{"code": 0}`
 
 - 双向删除
@@ -132,10 +132,10 @@ func (s *Server) authMiddleware() gin.HandlerFunc {
 
 | 接口 | 方法 | 说明 |
 |------|------|------|
-| `/goim/chat/send` | POST | 发送单聊消息 |
-| `/goim/chat/history` | GET | 拉取离线/历史消息 |
+| `/goim/chat` | POST | 发送单聊消息 |
+| `/goim/chat` | GET | 拉取离线/历史消息 |
 
-**POST /goim/chat/send**
+**POST /goim/chat**
 
 请求：
 ```json
@@ -180,7 +180,7 @@ Body: <上面的 JSON>
 ```
 7. 返回 msg_id 给发送方
 
-**GET /goim/chat/history**
+**GET /goim/chat**
 
 查询当前用户在某个时间点之后收到的所有消息，命中 `(to_id, created_at)` 索引。
 客户端自行按 `from_id` 分组到各会话。
@@ -284,11 +284,11 @@ internal/gateway/
 2. ~~`internal/gateway/dao/dao.go` — AutoMigrate 加新表~~ ✅
 3. ~~`internal/gateway/dao/friend.go` + 测试~~ ✅
 4. ~~`internal/gateway/dao/message.go` + 测试~~ ✅
-5. `internal/gateway/dao/user.go` — 新增 GetUsersByIDs
-6. `internal/gateway/http/middleware.go` — jwtHandler
+5. `internal/gateway/dao/user.go` — 新增 GetUsersByIDs ✅
+6. ~~`internal/gateway/http/middleware.go` — jwtHandler~~ ✅
 7. `internal/gateway/friend.go` + `http/friend.go` — 好友管理
 8. `internal/gateway/chat.go` + `http/chat.go` — 发消息 + 历史
-9. `http/user.go` — 用户信息查询
+9. `http/user.go` — 用户信息查询 ✅
 10. `internal/gateway/http/server.go` — 注册新路由 ✅
 11. 更新 `examples/jwt-client/main.go` — accepts 加 2001
 12. 端到端测试
@@ -317,23 +317,21 @@ TOKEN_B=$(curl -s http://localhost:3200/goim/auth/login \
   -d '{"username":"bob","password":"123456"}' | jq -r '.data.token')
 
 # 3. 添加好友
-curl -X POST http://localhost:3200/goim/friend/add \
-  -H "Authorization: Bearer $TOKEN_A" \
-  -H 'Content-Type: application/json' \
-  -d '{"friend_id": <bob_mid>}'
+curl -X POST http://localhost:3200/goim/friend/<bob_mid> \
+  -H "Authorization: Bearer $TOKEN_A"
 
 # 4. Bob 用 jwt-client 连接 WebSocket（accepts 包含 2001）
 go run examples/jwt-client/main.go -user bob -pass 123456
 
 # 5. Alice 发消息给 Bob
-curl -X POST http://localhost:3200/goim/chat/send \
+curl -X POST http://localhost:3200/goim/chat \
   -H "Authorization: Bearer $TOKEN_A" \
   -H 'Content-Type: application/json' \
   -d '{"to": <bob_mid>, "content_type": 1, "content": "hello bob"}'
 # 预期：Bob 的 WebSocket 收到 Op=2001 的消息
 
 # 6. 拉取历史（since 为 Unix 时间戳）
-curl "http://localhost:3200/goim/chat/history?since=0&limit=50" \
+curl "http://localhost:3200/goim/chat?since=0&limit=50" \
   -H "Authorization: Bearer $TOKEN_A"
 
 # 7. 批量查用户信息（消息中的 from ID）

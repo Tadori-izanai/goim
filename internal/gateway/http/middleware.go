@@ -6,6 +6,8 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/Terry-Mao/goim/internal/gateway/conf"
+	"github.com/Terry-Mao/goim/pkg/auth"
 	"github.com/gin-gonic/gin"
 	log "github.com/golang/glog"
 )
@@ -48,6 +50,22 @@ func recoverHandler(c *gin.Context) {
 	c.Next()
 }
 
+const contextMid = "context/mid"
+
 func jwtHandler(c *gin.Context) {
-	// todo
+	header := c.GetHeader("Authorization")
+	if header == "" || len(header) < 8 || header[:7] != "Bearer " {
+		c.AbortWithStatusJSON(401, resp{Code: -401, Message: "missing or invalid Authorization header"})
+		return
+	}
+	tokenStr := header[7:]
+
+	claims, err := auth.ParseToken(conf.Conf.JWT.Secret, tokenStr)
+	if err != nil {
+		c.AbortWithStatusJSON(401, resp{Code: -401, Message: "invalid or expired token"})
+		return
+	}
+
+	c.Set(contextMid, claims.Mid)
+	c.Next()
 }

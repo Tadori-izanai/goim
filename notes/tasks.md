@@ -47,8 +47,8 @@
 > Gateway 作为业务代理，goim 本体零改动。消息全量落库，同时实时推送。
 > 详细计划见 `notes/plan-single-chat.md`
 
-- [ ] 数据库设计：`friends` 表、`messages` 表（GORM AutoMigrate）
-- [ ] JWT 鉴权中间件（保护 `/goim/chat/*` 和 `/goim/friend/*`）
+- [x] 数据库设计：`friends` 表、`messages` 表（GORM AutoMigrate）
+- [x] JWT 鉴权中间件（保护 `/goim/chat/*` 和 `/goim/friend/*`）
 - [ ] 好友接口：添加好友、删除好友、好友列表
 - [ ] 发消息接口：Gateway 落库 → 调 Logic `/goim/push/mids`（op=2001）
 - [ ] 历史消息查询接口（分页游标）

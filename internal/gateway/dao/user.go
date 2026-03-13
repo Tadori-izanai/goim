@@ -30,7 +30,7 @@ func (d *Dao) GetUserByUsername(ctx context.Context, username string) (*model.Us
 	return &user, err
 }
 
-// GetUsersByIDs returns users matching the given IDs (only public fields: ID, Username).
+// GetUsersByIDs returns users matching the given IDs.
 func (d *Dao) GetUsersByIDs(ctx context.Context, ids []int64) ([]*model.User, error) {
 	var users []*model.User
 	err := d.db.WithContext(ctx).Where("id IN ?", ids).Find(&users).Error

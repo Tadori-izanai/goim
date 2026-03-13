@@ -3,23 +3,16 @@ package gateway
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"github.com/Terry-Mao/goim/api/logic"
 	"io"
 	"net/http"
 
-	"github.com/Terry-Mao/goim/internal/gateway/dao"
+	"github.com/Terry-Mao/goim/api/logic"
+
 	"github.com/Terry-Mao/goim/internal/gateway/model"
 	"github.com/Terry-Mao/goim/pkg/auth"
 	"golang.org/x/crypto/bcrypt"
 )
-
-// ErrDuplicateUsername is exposed for the HTTP layer to distinguish business errors.
-var ErrDuplicateUsername = dao.ErrDuplicateUsername
-
-// ErrInvalidCredentials is returned when username not found or password mismatch.
-var ErrInvalidCredentials = errors.New("invalid username or password")
 
 // LoginResponse is the response body for POST /goim/auth/login.
 type LoginResponse struct {
