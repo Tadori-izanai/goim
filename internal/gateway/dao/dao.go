@@ -18,7 +18,12 @@ func New(c *conf.Config) *Dao {
 	if err != nil {
 		panic(err)
 	}
-	if err = db.AutoMigrate(&model.User{}); err != nil {
+	err = db.AutoMigrate(
+		&model.User{},
+		&model.Friend{},
+		&model.Message{},
+	)
+	if err != nil {
 		panic(err)
 	}
 	return &Dao{db: db}

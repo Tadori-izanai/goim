@@ -44,11 +44,15 @@
 
 ## 阶段四：单聊
 
-- [ ] 数据库设计：`friends` 表、`messages` 表
-- [ ] 好友相关接口：添加好友、好友列表
-- [ ] 定义操作码：`OpSingleChat = 2001`
-- [ ] 发消息接口：业务 API → 落库 → `/goim/push/mids`（推给对方 mid）
-- [ ] 统一消息体结构：msgId / from / to / type / content / ts
+> Gateway 作为业务代理，goim 本体零改动。消息全量落库，同时实时推送。
+> 详细计划见 `notes/plan-single-chat.md`
+
+- [ ] 数据库设计：`friends` 表、`messages` 表（GORM AutoMigrate）
+- [ ] JWT 鉴权中间件（保护 `/goim/chat/*` 和 `/goim/friend/*`）
+- [ ] 好友接口：添加好友、删除好友、好友列表
+- [ ] 发消息接口：Gateway 落库 → 调 Logic `/goim/push/mids`（op=2001）
+- [ ] 历史消息查询接口（分页游标）
+- [ ] 端到端测试：注册 → 加好友 → 发消息 → WebSocket 收到
 
 ---
 
@@ -56,20 +60,18 @@
 
 > 在单聊基础上增量很小，复用消息存储和推送链路
 
-- [ ] 数据库设计：`groups` 表、`group_members` 表
+- [ ] 数据库设计：`groups` 表、`group_members` 表、`group_messages` 表
 - [ ] 群组接口：创建群、加入群、退出群、群成员列表
-- [ ] 定义操作码：`OpGroupChat = 2002`
-- [ ] 发群消息：业务 API → 落库 → `/goim/push/room`（广播给当前房间）
+- [ ] 发群消息：Gateway 落库 → 调 Logic `/goim/push/room`（op=2002）
 - [ ] 客户端切换群：发送 `OpChangeRoom` 切换到对应群房间
-- [ ] 非当前群的消息作为离线消息，切回时拉取
 
 ---
 
-## 阶段六：消息持久化与离线消息
+## 阶段六：离线消息与 ACK
 
-- [ ] 消息落库时机：业务 API 发消息时同步写入
-- [ ] 离线消息：用户上线 / 切换群时，拉取未读消息
-- [ ] 历史消息查询接口
+- [ ] users 表加 `last_online_at`，记录用户上次在线时间
+- [ ] 单聊离线：上线时查 `messages WHERE to_id=? AND created_at > last_online_at`
+- [ ] 群聊离线：`user_rooms` 表记录每个群的已读位置，进群时拉取
 - [ ] （可选）ACK 机制：客户端确认收到，超时重发，保证可靠投递
 
 ---
