@@ -133,7 +133,7 @@ func (s *Server) authMiddleware() gin.HandlerFunc {
 | 接口 | 方法 | 说明 |
 |------|------|------|
 | `/goim/chat/send` | POST | 发送单聊消息 |
-| `/goim/chat/history` | GET | 拉取历史消息 |
+| `/goim/chat/history` | GET | 拉取离线/历史消息 |
 
 **POST /goim/chat/send**
 
@@ -182,10 +182,12 @@ Body: <上面的 JSON>
 
 **GET /goim/chat/history**
 
+查询当前用户在某个时间点之后收到的所有消息，命中 `(to_id, created_at)` 索引。
+客户端自行按 `from_id` 分组到各会话。
+
 参数：
-- `peer_id` — 对方用户 ID（必需）
-- `last_msg_id` — 分页游标，返回此 msg_id 之前的消息（可选，不传则返回最新）
-- `limit` — 条数（可选，默认 20，最大 50）
+- `since` — Unix 时间戳（秒），返回此时间之后的消息（可选，默认返回最近消息）
+- `limit` — 条数（可选，默认 50，最大 200）
 
 响应：
 ```json
@@ -199,12 +201,44 @@ Body: <上面的 JSON>
       "content_type": 1,
       "content": "你好",
       "timestamp": 1710000000
+    },
+    {
+      "msg_id": "...",
+      "from": 789,
+      "to": 456,
+      "content_type": 1,
+      "content": "hi",
+      "timestamp": 1710000001
     }
   ]
 }
 ```
 
-倒序返回（最新消息在前），客户端上滑加载更多时传 `last_msg_id`。
+按 `created_at` 正序返回。客户端根据 `from` 字段自行归类到对应会话。
+
+### 用户信息接口
+
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| `/goim/user/info` | GET | 批量查询用户公开信息 |
+
+**GET /goim/user/info**
+
+参数：`ids` — 逗号分隔的用户 ID 列表（如 `ids=1,2,3`）
+
+响应：
+```json
+{
+  "code": 0,
+  "data": [
+    {"id": 1, "username": "alice"},
+    {"id": 2, "username": "bob"}
+  ]
+}
+```
+
+客户端拿到消息列表后，用其中的 `from` ID 批量查询用户信息，用于展示用户名等。
+需要 JWT 鉴权。
 
 ## 客户端消息格式
 
@@ -228,6 +262,7 @@ internal/gateway/
     http/middleware.go          # 新增 JWT 鉴权中间件（已有 logger/recover）
     http/chat.go                # 聊天 handler
     http/friend.go              # 好友 handler
+    http/user.go                # 用户信息 handler
     http/server.go              # 新增路由组
 ```
 
@@ -235,25 +270,28 @@ internal/gateway/
 
 | 文件 | 改动 |
 |------|------|
-| `internal/gateway/dao/dao.go` | AutoMigrate 加 Friend、Message |
-| `internal/gateway/http/server.go` | 新增路由组 + JWT 中间件 |
-| `internal/gateway/http/middleware.go` | 新增 authMiddleware |
+| `internal/gateway/dao/dao.go` | AutoMigrate 加 Friend、Message ✅ |
+| `internal/gateway/dao/user.go` | 新增 GetUsersByIDs 批量查询 |
+| `internal/gateway/http/server.go` | 新增路由组 + JWT 中间件 ✅ |
+| `internal/gateway/http/middleware.go` | 新增 jwtHandler |
 | `examples/jwt-client/main.go` | accepts 加 2001 |
 
 **goim 本体零改动**（Logic / Job / Comet 不改）
 
 ## 实现顺序
 
-1. `internal/gateway/model/friend.go` + `model/message.go`
-2. `internal/gateway/dao/dao.go` — AutoMigrate 加新表
-3. `internal/gateway/dao/friend.go`
-4. `internal/gateway/dao/message.go`
-5. `internal/gateway/http/middleware.go` — JWT 鉴权中间件
-6. `internal/gateway/friend.go` + `http/friend.go` — 好友管理
-7. `internal/gateway/chat.go` + `http/chat.go` — 发消息 + 历史
-8. `internal/gateway/http/server.go` — 注册新路由
-9. 更新 `examples/jwt-client/main.go` — accepts 加 2001
-10. 端到端测试
+1. ~~`internal/gateway/model/friend.go` + `model/message.go`~~ ✅
+2. ~~`internal/gateway/dao/dao.go` — AutoMigrate 加新表~~ ✅
+3. ~~`internal/gateway/dao/friend.go` + 测试~~ ✅
+4. ~~`internal/gateway/dao/message.go` + 测试~~ ✅
+5. `internal/gateway/dao/user.go` — 新增 GetUsersByIDs
+6. `internal/gateway/http/middleware.go` — jwtHandler
+7. `internal/gateway/friend.go` + `http/friend.go` — 好友管理
+8. `internal/gateway/chat.go` + `http/chat.go` — 发消息 + 历史
+9. `http/user.go` — 用户信息查询
+10. `internal/gateway/http/server.go` — 注册新路由 ✅
+11. 更新 `examples/jwt-client/main.go` — accepts 加 2001
+12. 端到端测试
 
 ## 验证方式
 
@@ -294,8 +332,12 @@ curl -X POST http://localhost:3200/goim/chat/send \
   -d '{"to": <bob_mid>, "content_type": 1, "content": "hello bob"}'
 # 预期：Bob 的 WebSocket 收到 Op=2001 的消息
 
-# 6. 拉取历史
-curl http://localhost:3200/goim/chat/history?peer_id=<bob_mid>&limit=10 \
+# 6. 拉取历史（since 为 Unix 时间戳）
+curl "http://localhost:3200/goim/chat/history?since=0&limit=50" \
+  -H "Authorization: Bearer $TOKEN_A"
+
+# 7. 批量查用户信息（消息中的 from ID）
+curl "http://localhost:3200/goim/user/info?ids=1,2" \
   -H "Authorization: Bearer $TOKEN_A"
 ```
 

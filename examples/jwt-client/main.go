@@ -107,6 +107,7 @@ func login(gateway, username, password string) (token string, wsAddr string, err
 		return "", "", fmt.Errorf("code=%d, message=%s", result.Code, result.Message)
 	}
 	var loginData struct {
+		ID    int64  `json:"id"`
 		Token string `json:"token"`
 		Nodes struct {
 			Domain  string   `json:"domain"`
@@ -117,6 +118,8 @@ func login(gateway, username, password string) (token string, wsAddr string, err
 	}
 	json.Unmarshal(result.Data, &loginData)
 	token = loginData.Token
+
+	log.Printf("(userID: %d)", loginData.ID)
 
 	// 构造 ws 地址：优先用 nodes 列表中的第一个 IP
 	host := "127.0.0.1"

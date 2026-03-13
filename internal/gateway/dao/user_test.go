@@ -80,3 +80,42 @@ func TestGetUserByUsername_NotFound(t *testing.T) {
 		t.Fatalf("expected gorm.ErrRecordNotFound, got: %v", err)
 	}
 }
+
+func TestGetUsersByIDs(t *testing.T) {
+	d := testDao(t)
+	ctx := context.Background()
+
+	u1 := &model.User{Username: "user1", Password: "pw"}
+	u2 := &model.User{Username: "user2", Password: "pw"}
+	u3 := &model.User{Username: "user3", Password: "pw"}
+	d.CreateUser(ctx, u1)
+	d.CreateUser(ctx, u2)
+	d.CreateUser(ctx, u3)
+
+	users, err := d.GetUsersByIDs(ctx, []int64{u1.ID, u3.ID})
+	if err != nil {
+		t.Fatalf("GetUsersByIDs failed: %v", err)
+	}
+	if len(users) != 2 {
+		t.Fatalf("expected 2 users, got %d", len(users))
+	}
+	// Should not expose password
+	for _, u := range users {
+		if u.Password != "" {
+			t.Fatal("expected password to be empty (not selected)")
+		}
+	}
+}
+
+func TestGetUsersByIDs_Empty(t *testing.T) {
+	d := testDao(t)
+	ctx := context.Background()
+
+	users, err := d.GetUsersByIDs(ctx, []int64{99999})
+	if err != nil {
+		t.Fatalf("GetUsersByIDs failed: %v", err)
+	}
+	if len(users) != 0 {
+		t.Fatalf("expected 0 users, got %d", len(users))
+	}
+}

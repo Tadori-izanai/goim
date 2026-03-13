@@ -47,3 +47,7 @@ func recoverHandler(c *gin.Context) {
 	}()
 	c.Next()
 }
+
+func jwtHandler(c *gin.Context) {
+	// todo
+}

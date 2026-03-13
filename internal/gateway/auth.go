@@ -23,6 +23,7 @@ var ErrInvalidCredentials = errors.New("invalid username or password")
 
 // LoginResponse is the response body for POST /goim/auth/login.
 type LoginResponse struct {
+	ID    int64             `json:"id"`
 	Token string            `json:"token"`
 	Nodes *logic.NodesReply `json:"nodes"`
 }
@@ -55,7 +56,7 @@ func (g *Gateway) Login(ctx context.Context, username, password string) (any, er
 	if err != nil {
 		return nil, err
 	}
-	return &LoginResponse{Token: token, Nodes: nodes}, nil
+	return &LoginResponse{ID: user.ID, Token: token, Nodes: nodes}, nil
 }
 
 // getNodes calls Logic's GET /goim/nodes/weighted to get comet node list.
