@@ -142,7 +142,7 @@ func sendAuth(conn *websocket.Conn, token, roomID string) error {
 		Token:    token,
 		RoomID:   roomID,
 		Platform: "web",
-		Accepts:  []int32{1000, 1001, 1002},
+		Accepts:  []int32{1000, 1001, 1002, 2001},
 	}
 
 	body, _ := json.Marshal(authBody)
