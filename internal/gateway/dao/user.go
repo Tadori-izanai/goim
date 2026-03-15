@@ -22,6 +22,13 @@ func (d *Dao) CreateUser(ctx context.Context, user *model.User) error {
 	return err
 }
 
+func (d *Dao) IsUserCreated(ctx context.Context, userID int64) (bool, error) {
+	var count int64
+	err := d.db.WithContext(ctx).Model(model.User{}).
+		Where("id = ?", userID).Count(&count).Error
+	return count > 0, err
+}
+
 // GetUserByUsername finds a user by username. Returns gorm.ErrRecordNotFound if not found.
 func (d *Dao) GetUserByUsername(ctx context.Context, username string) (*model.User, error) {
 	var user model.User

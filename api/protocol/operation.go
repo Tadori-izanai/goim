@@ -46,4 +46,7 @@ const (
 	OpUnsub = int32(16)
 	// OpUnsubReply unsubscribe operation reply
 	OpUnsubReply = int32(17)
+
+	// OpSingleChatMsg send single-chat message
+	OpSingleChatMsg = int32(2001)
 )

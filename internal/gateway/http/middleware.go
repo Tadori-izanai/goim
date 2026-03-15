@@ -69,3 +69,12 @@ func jwtHandler(c *gin.Context) {
 	c.Set(contextMid, claims.Mid)
 	c.Next()
 }
+
+func getUserIDFromBearer(c *gin.Context) (int64, bool) {
+	val, ok := c.Get(contextMid)
+	if !ok {
+		return 0, false
+	}
+	userID := val.(int64)
+	return userID, true
+}

@@ -20,7 +20,9 @@ func testDao(t *testing.T) *Dao {
 		},
 	}
 	d := New(c)
-	// Clean up users table before each test
+	// Clean up tables before each test
+	d.db.Exec("DELETE FROM friends")
+	d.db.Exec("DELETE FROM messages")
 	d.db.Exec("DELETE FROM users")
 	t.Cleanup(func() { d.Close() })
 	return d

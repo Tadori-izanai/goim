@@ -5,10 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 
 	"github.com/Terry-Mao/goim/api/logic"
-
 	"github.com/Terry-Mao/goim/internal/gateway/model"
 	"github.com/Terry-Mao/goim/pkg/auth"
 	"golang.org/x/crypto/bcrypt"
@@ -54,7 +52,7 @@ func (g *Gateway) Login(ctx context.Context, username, password string) (any, er
 
 // getNodes calls Logic's GET /goim/nodes/weighted to get comet node list.
 func (g *Gateway) getNodes() (*logic.NodesReply, error) {
-	resp, err := http.Get(g.c.Logic.Addr + "/goim/nodes/weighted")
+	resp, err := g.client.Get(g.c.Logic.Addr + "/goim/nodes/weighted")
 	if err != nil {
 		return nil, fmt.Errorf("get nodes from logic: %w", err)
 	}

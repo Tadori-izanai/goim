@@ -45,14 +45,26 @@ func testGateway(t *testing.T) (*Gateway, *httptest.Server) {
 	}
 	d := dao.New(c)
 	// Clean users table
+	d.Exec("DELETE FROM friends")
+	d.Exec("DELETE FROM messages")
 	d.Exec("DELETE FROM users")
 
-	g := &Gateway{c: c, dao: d}
+	g := &Gateway{c: c, dao: d, client: &http.Client{}}
 	t.Cleanup(func() {
 		logicSrv.Close()
 		d.Close()
 	})
 	return g, logicSrv
+}
+
+// mustLoginID is a test helper that logs in and returns the user's ID.
+func (g *Gateway) mustLoginID(t *testing.T, ctx context.Context, username, password string) int64 {
+	t.Helper()
+	res, err := g.Login(ctx, username, password)
+	if err != nil {
+		t.Fatalf("Login(%s) failed: %v", username, err)
+	}
+	return res.(*LoginResponse).ID
 }
 
 func TestRegister(t *testing.T) {

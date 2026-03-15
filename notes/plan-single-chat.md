@@ -150,10 +150,7 @@ func (s *Server) authMiddleware() gin.HandlerFunc {
 ```json
 {
   "code": 0,
-  "data": {
-    "msg_id": "550e8400-e29b-41d4-a716-446655440000",
-    "timestamp": 1710000000
-  }
+  "data": "550e8400-e29b-41d4-a716-446655440000", // message ID
 }
 ```
 
@@ -186,7 +183,7 @@ Body: <上面的 JSON>
 客户端自行按 `from_id` 分组到各会话。
 
 参数：
-- `since` — Unix 时间戳（秒），返回此时间之后的消息（可选，默认返回最近消息）
+- `since` — Unix 时间戳，返回此时间之后的消息（可选，默认返回最近消息）
 - `limit` — 条数（可选，默认 50，最大 200）
 
 响应：

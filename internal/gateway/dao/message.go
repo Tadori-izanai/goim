@@ -16,7 +16,7 @@ func (d *Dao) CreateMessage(ctx context.Context, fromID, toID int64, contentType
 		ToID:        toID,
 		ContentType: contentType,
 		Content:     content,
-		CreatedAt:   time.Now(),
+		CreatedAt:   model.UnixMilliTime(time.Now()),
 	}
 	err := d.db.WithContext(ctx).Create(msg).Error
 	return msg.MsgID, err
@@ -25,11 +25,11 @@ func (d *Dao) CreateMessage(ctx context.Context, fromID, toID int64, contentType
 // ListMessagesSince returns messages sent to toID after since, ordered by created_at ASC.
 // Hits the (to_id, created_at) index directly.
 // Client groups messages by from_id into conversations.
-func (d *Dao) ListMessagesSince(ctx context.Context, toID int64, since time.Time, limit int) ([]model.Message, error) {
+func (d *Dao) ListMessagesSince(ctx context.Context, toID int64, since time.Time, limit int) ([]*model.Message, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	var messages []model.Message
+	var messages []*model.Message
 	err := d.db.WithContext(ctx).
 		Where("to_id = ? AND created_at > ?", toID, since).
 		Order("created_at").
