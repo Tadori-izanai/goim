@@ -48,3 +48,15 @@ type Message struct {
 	Content     string        `gorm:"type:text;not null" json:"content"`
 	CreatedAt   UnixMilliTime `gorm:"not null;index:idx_to_created" json:"timestamp"`
 }
+
+// GroupMessage 群聊消息表，全量存储。
+// (group_id, created_at) 联合索引：按群拉取历史/离线消息
+type GroupMessage struct {
+	ID          int64         `gorm:"primaryKey;autoIncrement"`
+	MsgID       string        `gorm:"size:36;uniqueIndex;not null"`
+	GroupID     int64         `gorm:"not null;index:idx_group_created"`
+	FromID      int64         `gorm:"not null"`
+	ContentType int8          `gorm:"not null;default:1"`
+	Content     string        `gorm:"type:text;not null"`
+	CreatedAt   UnixMilliTime `gorm:"not null;index:idx_group_created"`
+}

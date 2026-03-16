@@ -49,4 +49,6 @@ const (
 
 	// OpSingleChatMsg send single-chat message
 	OpSingleChatMsg = int32(2001)
+	// OpGroupChatMsg send group-chat message
+	OpGroupChatMsg = int32(2002)
 )

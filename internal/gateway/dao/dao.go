@@ -22,6 +22,9 @@ func New(c *conf.Config) *Dao {
 		&model.User{},
 		&model.Friend{},
 		&model.Message{},
+		&model.Group{},
+		&model.GroupMember{},
+		&model.GroupMessage{},
 	)
 	if err != nil {
 		panic(err)
