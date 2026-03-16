@@ -21,6 +21,9 @@ func testDao(t *testing.T) *Dao {
 	}
 	d := New(c)
 	// Clean up tables before each test
+	d.db.Exec("DELETE FROM group_messages")
+	d.db.Exec("DELETE FROM group_members")
+	d.db.Exec("DELETE FROM `groups`")
 	d.db.Exec("DELETE FROM friends")
 	d.db.Exec("DELETE FROM messages")
 	d.db.Exec("DELETE FROM users")
