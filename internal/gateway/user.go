@@ -14,3 +14,12 @@ func (g *Gateway) UserByName(c context.Context, username string) (*model.User, e
 	user, err := g.dao.GetUserByUsername(c, username)
 	return user, err
 }
+
+func (g *Gateway) ListJoinedGroups(c context.Context, userID int64) ([]*model.Group, error) {
+	groupIDs, err := g.dao.ListGroupIDs(c, userID)
+	if err != nil {
+		return nil, err
+	}
+	groups, err := g.dao.GetGroupByIDs(c, groupIDs)
+	return groups, err
+}

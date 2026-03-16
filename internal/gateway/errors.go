@@ -14,4 +14,7 @@ var (
 	ErrUserNotFound       = errors.New("user not found")
 	ErrFriendSelf         = errors.New("cannot add yourself as friend")
 	ErrNotFriend          = errors.New("not friends")
+
+	ErrGroupNotFound  = errors.New("group not found")
+	ErrNotGroupMember = errors.New("not a group member")
 )

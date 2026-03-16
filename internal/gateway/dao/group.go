@@ -8,7 +8,7 @@ import (
 )
 
 // CreateGroup creates a group and added owner to this group.
-func (d *Dao) CreateGroup(ctx context.Context, groupName string, creatorID int64) (int64, error) {
+func (d *Dao) CreateGroup(ctx context.Context, groupName string, creatorID int64) (*model.Group, error) {
 	group := &model.Group{
 		Name:    groupName,
 		OwnerID: creatorID,
@@ -24,9 +24,16 @@ func (d *Dao) CreateGroup(ctx context.Context, groupName string, creatorID int64
 			JoinedAt:   now,
 			LastReadAt: now,
 		}
-		return tx.FirstOrCreate(&model.GroupMember{}, groupMember).Error
+		return tx.Create(groupMember).Error
 	})
-	return group.ID, err
+	return group, err
+}
+
+func (d *Dao) IsGroupCreated(ctx context.Context, groupID int64) (bool, error) {
+	var count int64
+	err := d.db.WithContext(ctx).Model(&model.Group{}).
+		Where("id = ?", groupID).Count(&count).Error
+	return count > 0, err
 }
 
 // JoinGroup checks if the user is in the group: if not then join the group.

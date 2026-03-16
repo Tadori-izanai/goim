@@ -45,6 +45,9 @@ func testGateway(t *testing.T) (*Gateway, *httptest.Server) {
 	}
 	d := dao.New(c)
 	// Clean users table
+	d.Exec("DELETE FROM group_messages")
+	d.Exec("DELETE FROM group_members")
+	d.Exec("DELETE FROM `groups`")
 	d.Exec("DELETE FROM friends")
 	d.Exec("DELETE FROM messages")
 	d.Exec("DELETE FROM users")

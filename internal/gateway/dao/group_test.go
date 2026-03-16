@@ -9,10 +9,11 @@ func TestCreateGroup(t *testing.T) {
 	d := testDao(t)
 	ctx := context.Background()
 
-	groupID, err := d.CreateGroup(ctx, "test-group", 1)
+	group, err := d.CreateGroup(ctx, "test-group", 1)
 	if err != nil {
 		t.Fatalf("CreateGroup failed: %v", err)
 	}
+	groupID := group.ID
 	if groupID == 0 {
 		t.Fatal("expected group ID to be set")
 	}
@@ -31,7 +32,8 @@ func TestJoinGroup(t *testing.T) {
 	d := testDao(t)
 	ctx := context.Background()
 
-	groupID, _ := d.CreateGroup(ctx, "test-group", 1)
+	group, _ := d.CreateGroup(ctx, "test-group", 1)
+	groupID := group.ID
 
 	if err := d.JoinGroup(ctx, groupID, 2); err != nil {
 		t.Fatalf("JoinGroup failed: %v", err)
@@ -47,7 +49,8 @@ func TestJoinGroup_Idempotent(t *testing.T) {
 	d := testDao(t)
 	ctx := context.Background()
 
-	groupID, _ := d.CreateGroup(ctx, "test-group", 1)
+	group, _ := d.CreateGroup(ctx, "test-group", 1)
+	groupID := group.ID
 	d.JoinGroup(ctx, groupID, 2)
 
 	// Join again — should not error
@@ -60,7 +63,8 @@ func TestQuitGroup(t *testing.T) {
 	d := testDao(t)
 	ctx := context.Background()
 
-	groupID, _ := d.CreateGroup(ctx, "test-group", 1)
+	group, _ := d.CreateGroup(ctx, "test-group", 1)
+	groupID := group.ID
 	d.JoinGroup(ctx, groupID, 2)
 
 	if err := d.QuitGroup(ctx, groupID, 2); err != nil {
@@ -77,7 +81,8 @@ func TestIsInGroup_NotMember(t *testing.T) {
 	d := testDao(t)
 	ctx := context.Background()
 
-	groupID, _ := d.CreateGroup(ctx, "test-group", 1)
+	group, _ := d.CreateGroup(ctx, "test-group", 1)
+	groupID := group.ID
 
 	ok, err := d.IsInGroup(ctx, groupID, 99)
 	if err != nil {
@@ -92,7 +97,8 @@ func TestListMemberIDs(t *testing.T) {
 	d := testDao(t)
 	ctx := context.Background()
 
-	groupID, _ := d.CreateGroup(ctx, "test-group", 1)
+	group, _ := d.CreateGroup(ctx, "test-group", 1)
+	groupID := group.ID
 	d.JoinGroup(ctx, groupID, 2)
 	d.JoinGroup(ctx, groupID, 3)
 
@@ -111,8 +117,8 @@ func TestListGroupIDs(t *testing.T) {
 
 	g1, _ := d.CreateGroup(ctx, "group-1", 1)
 	g2, _ := d.CreateGroup(ctx, "group-2", 2)
-	d.JoinGroup(ctx, g1, 3)
-	d.JoinGroup(ctx, g2, 3)
+	d.JoinGroup(ctx, g1.ID, 3)
+	d.JoinGroup(ctx, g2.ID, 3)
 
 	ids, err := d.ListGroupIDs(ctx, 3)
 	if err != nil {
@@ -131,7 +137,7 @@ func TestGetGroupByIDs(t *testing.T) {
 	d.CreateGroup(ctx, "group-b", 1)
 	g3, _ := d.CreateGroup(ctx, "group-c", 1)
 
-	groups, err := d.GetGroupByIDs(ctx, []int64{g1, g3})
+	groups, err := d.GetGroupByIDs(ctx, []int64{g1.ID, g3.ID})
 	if err != nil {
 		t.Fatalf("GetGroupByIDs failed: %v", err)
 	}

@@ -42,6 +42,7 @@ func (s *Server) initRouter() {
 	{
 		groupUser.GET("/info", s.userInfo)
 		groupUser.GET("/username/:username", s.userByName)
+		groupUser.GET("/group", jwtHandler, s.listJoinedGroups)
 	}
 
 	groupFriend := s.engine.Group("/goim/friend")
@@ -57,5 +58,14 @@ func (s *Server) initRouter() {
 	{
 		groupChat.POST("", s.sendMessage)
 		groupChat.GET("", s.historyMessage)
+	}
+
+	groupGroup := s.engine.Group("/goim/group")
+	groupGroup.Use(jwtHandler)
+	{
+		groupGroup.POST("", s.createGroup)
+		groupGroup.POST(":group_id/join", s.joinGroup)
+		groupGroup.POST(":group_id/quit", s.quitGroup)
+		groupGroup.GET(":group_id/members", s.listGroupMembers)
 	}
 }

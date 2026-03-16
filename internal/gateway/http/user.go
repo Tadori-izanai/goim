@@ -1,6 +1,9 @@
 package http
 
-import "github.com/gin-gonic/gin"
+import (
+	"github.com/Terry-Mao/goim/internal/gateway"
+	"github.com/gin-gonic/gin"
+)
 
 func (s *Server) userInfo(c *gin.Context) {
 	var arg struct {
@@ -26,4 +29,18 @@ func (s *Server) userByName(c *gin.Context) {
 		return
 	}
 	result(c, res, OK)
+}
+
+func (s *Server) listJoinedGroups(c *gin.Context) {
+	userID, ok := getUserIDFromBearer(c)
+	if !ok {
+		errors_(c, RequestErr, gateway.ErrInvalidCredentials.Error())
+		return
+	}
+	groups, err := s.gateway.ListJoinedGroups(c, userID)
+	if err != nil {
+		errors_(c, ServerErr, err.Error())
+		return
+	}
+	result(c, groups, OK)
 }
