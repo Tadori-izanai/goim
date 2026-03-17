@@ -17,12 +17,10 @@ func (d *Dao) CreateGroup(ctx context.Context, groupName string, creatorID int64
 		if err := tx.Create(group).Error; err != nil {
 			return err
 		}
-		now := time.Now()
 		groupMember := &model.GroupMember{
-			GroupID:    group.ID,
-			UserID:     creatorID,
-			JoinedAt:   now,
-			LastReadAt: now,
+			GroupID:  group.ID,
+			UserID:   creatorID,
+			JoinedAt: time.Now(),
 		}
 		return tx.Create(groupMember).Error
 	})
@@ -38,12 +36,10 @@ func (d *Dao) IsGroupCreated(ctx context.Context, groupID int64) (bool, error) {
 
 // JoinGroup checks if the user is in the group: if not then join the group.
 func (d *Dao) JoinGroup(ctx context.Context, groupID, userID int64) error {
-	now := time.Now()
 	groupMember := &model.GroupMember{
-		GroupID:    groupID,
-		UserID:     userID,
-		JoinedAt:   now,
-		LastReadAt: now,
+		GroupID:  groupID,
+		UserID:   userID,
+		JoinedAt: time.Now(),
 	}
 
 	return d.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
