@@ -65,3 +65,11 @@ func (s *Server) historyMessage(c *gin.Context) {
 	}
 	result(c, messages, OK)
 }
+
+func (s *Server) sendGroupMessage(c *gin.Context) {
+	
+}
+
+func (s *Server) historyGroupMessage(c *gin.Context) {
+
+}

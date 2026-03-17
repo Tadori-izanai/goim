@@ -109,3 +109,74 @@ func TestListMessagesSince_Limit(t *testing.T) {
 		t.Fatalf("expected 3 messages with limit, got %d", len(msgs))
 	}
 }
+
+func TestCreateGroupMessage(t *testing.T) {
+	d := testDao(t)
+	ctx := context.Background()
+
+	msgID, err := d.CreateGroupMessage(ctx, 1, 100, 1, "hello group")
+	if err != nil {
+		t.Fatalf("CreateGroupMessage failed: %v", err)
+	}
+	if msgID == "" {
+		t.Fatal("expected non-empty msg_id")
+	}
+}
+
+func TestListGroupMessagesSince(t *testing.T) {
+	d := testDao(t)
+	ctx := context.Background()
+
+	before := time.Now().Add(-time.Second)
+
+	d.CreateGroupMessage(ctx, 1, 100, 1, "msg1")
+	d.CreateGroupMessage(ctx, 1, 200, 1, "msg2")
+	d.CreateGroupMessage(ctx, 1, 100, 1, "msg3")
+
+	msgs, err := d.ListGroupMessagesSince(ctx, 1, before, 50)
+	if err != nil {
+		t.Fatalf("ListGroupMessagesSince failed: %v", err)
+	}
+	if len(msgs) != 3 {
+		t.Fatalf("expected 3 messages, got %d", len(msgs))
+	}
+	if msgs[0].Content != "msg1" || msgs[2].Content != "msg3" {
+		t.Fatalf("expected ASC order, got: %s, %s, %s", msgs[0].Content, msgs[1].Content, msgs[2].Content)
+	}
+}
+
+func TestListGroupMessagesSince_OnlyTargetGroup(t *testing.T) {
+	d := testDao(t)
+	ctx := context.Background()
+
+	before := time.Now().Add(-time.Second)
+
+	d.CreateGroupMessage(ctx, 1, 100, 1, "group 1 msg")
+	d.CreateGroupMessage(ctx, 2, 100, 1, "group 2 msg")
+
+	msgs, err := d.ListGroupMessagesSince(ctx, 1, before, 50)
+	if err != nil {
+		t.Fatalf("ListGroupMessagesSince failed: %v", err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 message for group 1, got %d", len(msgs))
+	}
+}
+
+func TestListGroupMessagesSince_Limit(t *testing.T) {
+	d := testDao(t)
+	ctx := context.Background()
+
+	before := time.Now().Add(-time.Second)
+	for i := 0; i < 5; i++ {
+		d.CreateGroupMessage(ctx, 1, 100, 1, "msg")
+	}
+
+	msgs, err := d.ListGroupMessagesSince(ctx, 1, before, 3)
+	if err != nil {
+		t.Fatalf("ListGroupMessagesSince failed: %v", err)
+	}
+	if len(msgs) != 3 {
+		t.Fatalf("expected 3 messages with limit, got %d", len(msgs))
+	}
+}

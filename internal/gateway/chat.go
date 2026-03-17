@@ -21,18 +21,34 @@ func (g *Gateway) SendMessage(c context.Context, fromID, toID int64, contentType
 		return "", ErrNotFriend
 	}
 
-	if err := g.postMessageToLogic(toID, []byte(content)); err != nil {
+	msgID, err := g.dao.CreateMessage(c, fromID, toID, contentType, content)
+	if err != nil {
 		return "", err
 	}
-	msgID, err := g.dao.CreateMessage(c, fromID, toID, contentType, content)
+
+	pushBody, _ := json.Marshal(map[string]any{
+		"msg_id":       msgID,
+		"from":         fromID,
+		"to":           toID,
+		"content_type": contentType,
+		"content":      content,
+		"timestamp":    time.Now().UnixMilli(),
+	})
+	err = g.postMessageToLogic(toID, pushBody)
 	return msgID, err
 }
 
 func (g *Gateway) postMessageToLogic(toID int64, msg []byte) error {
+	return g.pushToMids(protocol.OpSingleChatMsg, []int64{toID}, msg)
+}
+
+func (g *Gateway) pushToMids(op int32, mids []int64, msg []byte) error {
 	baseURL := g.c.Logic.Addr + "/goim/push/mids"
 	params := url.Values{}
-	params.Set("operation", strconv.Itoa(int(protocol.OpSingleChatMsg)))
-	params.Set("mids", strconv.FormatInt(toID, 10))
+	params.Set("operation", strconv.Itoa(int(op)))
+	for _, mid := range mids {
+		params.Add("mids", strconv.FormatInt(mid, 10))
+	}
 	fullURL := fmt.Sprintf("%s?%s", baseURL, params.Encode())
 
 	req, err := http.NewRequest("POST", fullURL, bytes.NewBuffer(msg))
@@ -66,4 +82,16 @@ func (g *Gateway) postMessageToLogic(toID int64, msg []byte) error {
 func (g *Gateway) HistoryMessage(c context.Context, toID int64, since time.Time, limit int) ([]*model.Message, error) {
 	messages, err := g.dao.ListMessagesSince(c, toID, since, limit)
 	return messages, err
+}
+
+func (g *Gateway) GroupMessage(c context.Context, groupID, userID int64, contentType int8, content string) (string, error) {
+	return "", nil
+}
+
+func (g *Gateway) postGroupMessageToLogic(memberIDs []int64, msg []byte) error {
+	return g.pushToMids(protocol.OpGroupChatMsg, memberIDs, msg)
+}
+
+func (g *Gateway) HistoryGroupMessage(c context.Context, groupID, userID int64, since time.Time, limit int) ([]*model.GroupMessage, error) {
+	return nil, nil
 }

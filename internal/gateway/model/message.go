@@ -52,11 +52,11 @@ type Message struct {
 // GroupMessage 群聊消息表，全量存储。
 // (group_id, created_at) 联合索引：按群拉取历史/离线消息
 type GroupMessage struct {
-	ID          int64         `gorm:"primaryKey;autoIncrement"`
-	MsgID       string        `gorm:"size:36;uniqueIndex;not null"`
-	GroupID     int64         `gorm:"not null;index:idx_group_created"`
-	FromID      int64         `gorm:"not null"`
-	ContentType int8          `gorm:"not null;default:1"`
-	Content     string        `gorm:"type:text;not null"`
-	CreatedAt   UnixMilliTime `gorm:"not null;index:idx_group_created"`
+	ID          int64         `gorm:"primaryKey;autoIncrement" json:"-"`
+	MsgID       string        `gorm:"size:36;uniqueIndex;not null" json:"msg_id"`
+	GroupID     int64         `gorm:"not null;index:idx_group_created" json:"group_id"`
+	FromID      int64         `gorm:"not null" json:"from"`
+	ContentType int8          `gorm:"not null;default:1" json:"content_type"`
+	Content     string        `gorm:"type:text;not null" json:"content"`
+	CreatedAt   UnixMilliTime `gorm:"not null;index:idx_group_created" json:"timestamp"`
 }

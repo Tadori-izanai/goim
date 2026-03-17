@@ -86,7 +86,19 @@ func main() {
 		select {
 		case msg := <-msgCh:
 			received++
-			log.Printf("Bob 收到推送 [%d/2]: %s", received, msg)
+			var push struct {
+				MsgID       string `json:"msg_id"`
+				From        int64  `json:"from"`
+				To          int64  `json:"to"`
+				ContentType int8   `json:"content_type"`
+				Content     string `json:"content"`
+				Timestamp   int64  `json:"timestamp"`
+			}
+			if err := json.Unmarshal([]byte(msg), &push); err != nil {
+				log.Printf("Bob 收到推送 [%d/2] (raw): %s", received, msg)
+			} else {
+				log.Printf("Bob 收到推送 [%d/2]: from=%d, content=%q, msg_id=%s", received, push.From, push.Content, push.MsgID)
+			}
 		case <-timeout:
 			log.Printf("超时，共收到 %d 条推送", received)
 			goto history

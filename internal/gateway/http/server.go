@@ -67,5 +67,8 @@ func (s *Server) initRouter() {
 		groupGroup.POST(":group_id/join", s.joinGroup)
 		groupGroup.POST(":group_id/quit", s.quitGroup)
 		groupGroup.GET(":group_id/members", s.listGroupMembers)
+
+		groupGroup.POST(":group_id/chat", s.sendGroupMessage)
+		groupGroup.GET(":group_id/chat", s.historyGroupMessage)
 	}
 }

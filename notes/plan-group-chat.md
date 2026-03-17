@@ -176,6 +176,7 @@ type GroupMessage struct {
 请求：
 ```json
 {
+  "to": 1, // group id
   "content_type": 1,
   "content": "大家好"
 }
@@ -185,7 +186,7 @@ type GroupMessage struct {
 ```json
 {
   "code": 0,
-  "data": "550e8400-e29b-41d4-a716-446655440000"
+  "data": "550e8400-e29b-41d4-a716-446655440000" // group message id
 }
 ```
 
@@ -205,12 +206,13 @@ type GroupMessage struct {
   "timestamp": 1710000000000
 }
 ```
-6. 调用 Logic HTTP：
+6. 查询群内所有成员的 mid
+7. 调用 Logic HTTP：
 ```
-POST http://logic:3111/goim/push/room?operation=2002&type=group&room=1
+POST http://logic:3111/goim/push/mids?operation=2002&mids=4&mids=5&mids=6...
 Body: <上面的 JSON>
 ```
-7. 返回 msg_id 给发送方
+8. 返回 msg_id 给发送方
 
 **GET /goim/group/:group_id/chat**
 
@@ -250,7 +252,7 @@ Body: <上面的 JSON>
 
 客户端进入群聊时，发送 `OpChangeRoom`（op=12），body 为 `group://<group_id>`。
 
-**注意**：goim 原生的 Room 机制是每个连接只能在一个 Room 中。如果需要同时接收多个群的消息，需要评估是否改用 `POST /goim/push/mids` 逐个推送给群成员。但目前先使用 Room 机制，一次只接收一个群的实时消息，其他群的消息通过拉取历史获得。
+**注意**：goim 原生的 Room 机制是每个连接只能在一个 Room 中。如果需要同时接收多个群的消息，需要用 `POST /goim/push/mids` 逐个推送给群成员。
 
 ## 新增错误定义
 
