@@ -19,19 +19,24 @@ const (
 	OpHeartbeat      = 2
 	OpHeartbeatReply = 3
 	OpRaw            = 9
-	OpSingleChatMsg  = 2001
+	OpGroupChatMsg   = 2002
 )
 
-// chat-demo: 完整的单聊端到端测试
+// group-chat-demo: 完整的群聊端到端测试
 //
-// 启动两个用户 (alice, bob)，测试:
+// 启动三个用户 (alice, bob, charlie)，测试:
 //  1. 注册 + 登录
-//  2. 添加好友
-//  3. Bob WebSocket 连接 Comet
-//  4. Alice 发消息给 Bob → Bob WebSocket 实时收到
-//  5. Alice 拉取历史消息
+//  2. Alice 创建群
+//  3. Bob、Charlie 加入群
+//  4. 查看群成员列表
+//  5. Bob、Charlie WebSocket 连接 Comet
+//  6. Alice 发群消息 → Bob、Charlie WebSocket 实时收到
+//  7. 拉取群历史消息
+//  8. 查询已加入的群列表
+//  9. Charlie 退出群
+// 10. 验证非成员不能发消息
 //
-// 用法: go run examples/chat-demo/main.go
+// 用法: go run examples/group-chat-demo/main.go
 func main() {
 	gatewayAddr := flag.String("gateway", "http://127.0.0.1:3200", "Gateway HTTP 地址")
 	flag.Parse()
@@ -42,91 +47,114 @@ func main() {
 	log.Println("=== 注册用户 ===")
 	register(gw, "alice", "123456")
 	register(gw, "bob", "123456")
+	register(gw, "charlie", "123456")
 
 	// 2. 登录
 	log.Println("=== 登录 ===")
 	aliceToken, aliceID, _ := login(gw, "alice", "123456")
-	bobToken, bobID, wsAddr := login(gw, "bob", "123456")
-	log.Printf("Alice ID=%d, Bob ID=%d", aliceID, bobID)
+	bobToken, bobID, bobWs := login(gw, "bob", "123456")
+	charlieToken, charlieID, charlieWs := login(gw, "charlie", "123456")
+	log.Printf("Alice ID=%d, Bob ID=%d, Charlie ID=%d", aliceID, bobID, charlieID)
 
-	// 3. Alice 添加 Bob 为好友
-	log.Println("=== 添加好友 ===")
-	addFriend(gw, aliceToken, bobID)
-	log.Println("Alice 添加 Bob 为好友成功")
+	// 3. Alice 创建群
+	log.Println("=== Alice 创建群 ===")
+	groupID := createGroup(gw, aliceToken, "测试群")
+	log.Printf("群创建成功, ID=%d", groupID)
 
-	// 验证好友列表
-	friends := listFriends(gw, aliceToken)
-	log.Printf("Alice 的好友列表: %s", friends)
+	// 4. Bob、Charlie 加入群
+	log.Println("=== Bob、Charlie 加入群 ===")
+	joinGroup(gw, bobToken, groupID)
+	log.Println("Bob 加入群成功")
+	joinGroup(gw, charlieToken, groupID)
+	log.Println("Charlie 加入群成功")
 
-	// 4. Bob 连接 WebSocket
-	log.Println("=== Bob 连接 Comet ===")
-	conn := connectComet(wsAddr, bobToken)
-	defer conn.Close()
+	// 5. 查看群成员
+	log.Println("=== 查看群成员 ===")
+	members := listGroupMembers(gw, aliceToken, groupID)
+	log.Printf("群成员: %s", members)
 
-	// 启动 Bob 的心跳
-	go heartbeatLoop(conn)
+	// 6. 查看已加入的群列表
+	log.Println("=== 查看 Bob 已加入的群 ===")
+	groups := listJoinedGroups(gw, bobToken)
+	log.Printf("Bob 的群列表: %s", groups)
 
-	// 启动 Bob 的消息接收（异步）
-	msgCh := make(chan string, 10)
-	go func() {
-		receiveLoop(conn, msgCh)
-	}()
+	// 7. Bob、Charlie 连接 WebSocket
+	log.Println("=== Bob、Charlie 连接 Comet ===")
+	bobConn := connectComet(bobWs, bobToken)
+	defer bobConn.Close()
+	charlieConn := connectComet(charlieWs, charlieToken)
+	defer charlieConn.Close()
 
-	// 5. Alice 发消息给 Bob
-	log.Println("=== Alice 发消息 ===")
-	sendMessage(gw, aliceToken, bobID, "你好 Bob！")
-	sendMessage(gw, aliceToken, bobID, "第二条消息")
+	go heartbeatLoop(bobConn)
+	go heartbeatLoop(charlieConn)
+
+	bobMsgCh := make(chan string, 10)
+	charlieMsgCh := make(chan string, 10)
+	go receiveLoop(bobConn, bobMsgCh)
+	go receiveLoop(charlieConn, charlieMsgCh)
+
+	// 8. Alice 发群消息
+	log.Println("=== Alice 发群消息 ===")
+	sendGroupMessage(gw, aliceToken, groupID, "大家好！")
+	sendGroupMessage(gw, aliceToken, groupID, "第二条群消息")
 	log.Println("发送完成")
 
-	// 6. 等待 Bob 收到 WebSocket 推送
+	// 9. 等待 Bob 和 Charlie 收到推送
 	log.Println("=== 等待 Bob 收到推送 ===")
+	waitGroupMessages(bobMsgCh, "Bob", 2)
+
+	log.Println("=== 等待 Charlie 收到推送 ===")
+	waitGroupMessages(charlieMsgCh, "Charlie", 2)
+
+	// 10. 拉取群历史消息
+	log.Println("=== 拉取群历史消息 ===")
+	history := getGroupHistory(gw, aliceToken, groupID, 0, 50)
+	log.Printf("群历史消息: %s", history)
+
+	// 11. Charlie 退出群
+	log.Println("=== Charlie 退出群 ===")
+	quitGroup(gw, charlieToken, groupID)
+	log.Println("Charlie 退出群成功")
+
+	// 12. 验证退群后不能发消息
+	log.Println("=== 验证非成员不能发群消息 ===")
+	err := sendGroupMessageRaw(gw, charlieToken, groupID, "should fail")
+	log.Printf("非成员发群消息结果: %s", err)
+
+	// 13. 验证退群后不能拉历史
+	log.Println("=== 验证非成员不能拉群历史 ===")
+	errHist := getGroupHistoryRaw(gw, charlieToken, groupID, 0, 50)
+	log.Printf("非成员拉群历史结果: %s", errHist)
+
+	log.Println("=== 测试完成 ===")
+}
+
+func waitGroupMessages(ch <-chan string, who string, expect int) {
 	timeout := time.After(5 * time.Second)
 	received := 0
-	for received < 2 {
+	for received < expect {
 		select {
-		case msg := <-msgCh:
+		case msg := <-ch:
 			received++
 			var push struct {
 				MsgID       string `json:"msg_id"`
+				GroupID     int64  `json:"group_id"`
 				From        int64  `json:"from"`
-				To          int64  `json:"to"`
 				ContentType int8   `json:"content_type"`
 				Content     string `json:"content"`
 				Timestamp   int64  `json:"timestamp"`
 			}
 			if err := json.Unmarshal([]byte(msg), &push); err != nil {
-				log.Printf("Bob 收到推送 [%d/2] (raw): %s", received, msg)
+				log.Printf("%s 收到推送 [%d/%d] (raw): %s", who, received, expect, msg)
 			} else {
-				log.Printf("Bob 收到推送 [%d/2]: from=%d, content=%q, msg_id=%s", received, push.From, push.Content, push.MsgID)
+				log.Printf("%s 收到推送 [%d/%d]: group=%d, from=%d, content=%q",
+					who, received, expect, push.GroupID, push.From, push.Content)
 			}
 		case <-timeout:
-			log.Printf("超时，共收到 %d 条推送", received)
-			goto history
+			log.Printf("%s 超时，共收到 %d/%d 条推送", who, received, expect)
+			return
 		}
 	}
-
-history:
-	// 7. Alice 拉取历史消息
-	log.Println("=== Bob 拉取历史 ===")
-	messages := getHistory(gw, bobToken, 0, 50)
-	log.Printf("历史消息: %s", messages)
-
-	// 8. 查询用户信息
-	log.Println("=== 查询用户信息 ===")
-	userInfo := getUserInfo(gw, aliceToken, fmt.Sprintf("%d,%d", aliceID, bobID))
-	log.Printf("用户信息: %s", userInfo)
-
-	// 9. 删除好友
-	log.Println("=== 删除好友 ===")
-	removeFriend(gw, aliceToken, bobID)
-	log.Println("Alice 删除 Bob 好友关系成功")
-
-	// 验证不能再发消息
-	log.Println("=== 验证非好友不能发消息 ===")
-	err := sendMessageRaw(gw, aliceToken, bobID, "should fail")
-	log.Printf("非好友发消息结果: %s", err)
-
-	log.Println("=== 测试完成 ===")
 }
 
 // --- Gateway HTTP helpers ---
@@ -162,21 +190,6 @@ func apiGet(url, token string) *apiResponse {
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		log.Fatalf("GET %s 失败: %v", url, err)
-	}
-	defer resp.Body.Close()
-	var result apiResponse
-	json.NewDecoder(resp.Body).Decode(&result)
-	return &result
-}
-
-func apiDelete(url, token string) *apiResponse {
-	req, _ := http.NewRequest("DELETE", url, nil)
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		log.Fatalf("DELETE %s 失败: %v", url, err)
 	}
 	defer resp.Body.Close()
 	var result apiResponse
@@ -221,35 +234,52 @@ func login(gw, username, password string) (token string, userID int64, wsAddr st
 	return data.Token, data.ID, wsAddr
 }
 
-func addFriend(gw, token string, friendID int64) {
-	result := apiPost(fmt.Sprintf("%s/goim/friend/%d", gw, friendID), token, nil)
+func createGroup(gw, token, name string) int64 {
+	result := apiPost(gw+"/goim/group", token, map[string]string{"name": name})
 	if result.Code != 0 {
-		log.Fatalf("添加好友失败: %s", result.Message)
+		log.Fatalf("创建群失败: %s", result.Message)
+	}
+	var data struct {
+		ID int64 `json:"id"`
+	}
+	json.Unmarshal(result.Data, &data)
+	return data.ID
+}
+
+func joinGroup(gw, token string, groupID int64) {
+	result := apiPost(fmt.Sprintf("%s/goim/group/%d/join", gw, groupID), token, nil)
+	if result.Code != 0 {
+		log.Fatalf("加入群失败: %s", result.Message)
 	}
 }
 
-func removeFriend(gw, token string, friendID int64) {
-	result := apiDelete(fmt.Sprintf("%s/goim/friend/%d", gw, friendID), token)
+func quitGroup(gw, token string, groupID int64) {
+	result := apiPost(fmt.Sprintf("%s/goim/group/%d/quit", gw, groupID), token, nil)
 	if result.Code != 0 {
-		log.Fatalf("删除好友失败: %s", result.Message)
+		log.Fatalf("退出群失败: %s", result.Message)
 	}
 }
 
-func listFriends(gw, token string) string {
-	result := apiGet(gw+"/goim/friend", token)
+func listGroupMembers(gw, token string, groupID int64) string {
+	result := apiGet(fmt.Sprintf("%s/goim/group/%d/members", gw, groupID), token)
 	return string(result.Data)
 }
 
-func sendMessage(gw, token string, toID int64, content string) {
-	result := sendMessageRaw(gw, token, toID, content)
-	if result != "" {
-		log.Fatalf("发消息失败: %s", result)
+func listJoinedGroups(gw, token string) string {
+	result := apiGet(gw+"/goim/user/group", token)
+	return string(result.Data)
+}
+
+func sendGroupMessage(gw, token string, groupID int64, content string) {
+	err := sendGroupMessageRaw(gw, token, groupID, content)
+	if err != "" {
+		log.Fatalf("发群消息失败: %s", err)
 	}
 }
 
-func sendMessageRaw(gw, token string, toID int64, content string) string {
-	result := apiPost(gw+"/goim/chat", token, map[string]any{
-		"to": toID, "content_type": 1, "content": content,
+func sendGroupMessageRaw(gw, token string, groupID int64, content string) string {
+	result := apiPost(fmt.Sprintf("%s/goim/group/%d/chat", gw, groupID), token, map[string]any{
+		"content_type": 1, "content": content,
 	})
 	if result.Code != 0 {
 		return fmt.Sprintf("code=%d, message=%s", result.Code, result.Message)
@@ -257,14 +287,17 @@ func sendMessageRaw(gw, token string, toID int64, content string) string {
 	return ""
 }
 
-func getHistory(gw, token string, sinceMs int64, limit int) string {
-	result := apiGet(fmt.Sprintf("%s/goim/chat?since=%d&limit=%d", gw, sinceMs, limit), token)
+func getGroupHistory(gw, token string, groupID int64, sinceMs int64, limit int) string {
+	result := apiGet(fmt.Sprintf("%s/goim/group/%d/chat?since=%d&limit=%d", gw, groupID, sinceMs, limit), token)
 	return string(result.Data)
 }
 
-func getUserInfo(gw, token, ids string) string {
-	result := apiGet(fmt.Sprintf("%s/goim/user/info?ids=%s", gw, ids), token)
-	return string(result.Data)
+func getGroupHistoryRaw(gw, token string, groupID int64, sinceMs int64, limit int) string {
+	result := apiGet(fmt.Sprintf("%s/goim/group/%d/chat?since=%d&limit=%d", gw, groupID, sinceMs, limit), token)
+	if result.Code != 0 {
+		return fmt.Sprintf("code=%d, message=%s", result.Code, result.Message)
+	}
+	return ""
 }
 
 // --- Comet WebSocket ---
@@ -275,17 +308,15 @@ func connectComet(wsAddr, token string) *websocket.Conn {
 		log.Fatalf("WebSocket 连接失败: %v", err)
 	}
 
-	// 发送 JWT 鉴权，accepts 包含 OpSingleChatMsg
 	authBody, _ := json.Marshal(map[string]any{
 		"token":    token,
 		"room_id":  "",
 		"platform": "web",
-		"accepts":  []int32{1000, 1001, 1002, OpSingleChatMsg},
+		"accepts":  []int32{1000, 1001, 1002, OpGroupChatMsg},
 	})
 	packet := encodePacket(1, OpAuth, 1, authBody)
 	conn.WriteMessage(websocket.BinaryMessage, packet)
 
-	// 等待鉴权响应
 	_, data, err := conn.ReadMessage()
 	if err != nil || decodeOp(data) != OpAuthReply {
 		log.Fatalf("Comet 鉴权失败")
@@ -319,7 +350,6 @@ func receiveLoop(conn *websocket.Conn, msgCh chan<- string) {
 		case OpHeartbeatReply:
 			// ignore
 		case OpRaw:
-			// 批量消息：解析子包
 			offset := 16
 			for offset < len(data) {
 				subPackLen := int(binary.BigEndian.Uint32(data[offset : offset+4]))

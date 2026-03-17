@@ -84,8 +84,32 @@ func (g *Gateway) HistoryMessage(c context.Context, toID int64, since time.Time,
 	return messages, err
 }
 
-func (g *Gateway) GroupMessage(c context.Context, groupID, userID int64, contentType int8, content string) (string, error) {
-	return "", nil
+func (g *Gateway) SendGroupMessage(c context.Context, groupID, fromID int64, contentType int8, content string) (string, error) {
+	if isMember, err := g.dao.IsInGroup(c, groupID, fromID); err != nil {
+		return "", err
+	} else if !isMember {
+		return "", ErrNotGroupMember
+	}
+
+	msgID, err := g.dao.CreateGroupMessage(c, groupID, fromID, contentType, content)
+	if err != nil {
+		return "", err
+	}
+
+	memberIDs, err := g.dao.ListMemberIDs(c, groupID)
+	if err != nil {
+		return "", err
+	}
+	pushBody, _ := json.Marshal(map[string]any{
+		"msg_id":       msgID,
+		"group_id":     groupID,
+		"from":         fromID,
+		"content_type": contentType,
+		"content":      content,
+		"timestamp":    time.Now().UnixMilli(),
+	})
+	err = g.postGroupMessageToLogic(memberIDs, pushBody)
+	return msgID, err
 }
 
 func (g *Gateway) postGroupMessageToLogic(memberIDs []int64, msg []byte) error {
@@ -93,5 +117,10 @@ func (g *Gateway) postGroupMessageToLogic(memberIDs []int64, msg []byte) error {
 }
 
 func (g *Gateway) HistoryGroupMessage(c context.Context, groupID, userID int64, since time.Time, limit int) ([]*model.GroupMessage, error) {
-	return nil, nil
+	if isMember, err := g.dao.IsInGroup(c, groupID, userID); err != nil {
+		return nil, err
+	} else if !isMember {
+		return nil, ErrNotGroupMember
+	}
+	return g.dao.ListGroupMessagesSince(c, groupID, since, limit)
 }

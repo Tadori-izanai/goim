@@ -67,9 +67,73 @@ func (s *Server) historyMessage(c *gin.Context) {
 }
 
 func (s *Server) sendGroupMessage(c *gin.Context) {
-	
+	userID, ok := getUserIDFromBearer(c)
+	if !ok {
+		errors_(c, RequestErr, gateway.ErrInvalidCredentials.Error())
+		return
+	}
+	groupID, err := getGroupIDFromRouter(c)
+	if err != nil {
+		errors_(c, RequestErr, err.Error())
+		return
+	}
+
+	var body struct {
+		ContentType int8   `json:"content_type"`
+		Content     string `json:"content"`
+	}
+	if err := c.BindJSON(&body); err != nil {
+		errors_(c, RequestErr, err.Error())
+		return
+	}
+
+	msgID, err := s.gateway.SendGroupMessage(c, groupID, userID, body.ContentType, body.Content)
+	if err != nil {
+		switch {
+		case errors.Is(err, gateway.ErrNotGroupMember):
+			errors_(c, RequestErr, err.Error())
+		default:
+			errors_(c, ServerErr, err.Error())
+		}
+		return
+	}
+	result(c, msgID, OK)
 }
 
 func (s *Server) historyGroupMessage(c *gin.Context) {
+	userID, ok := getUserIDFromBearer(c)
+	if !ok {
+		errors_(c, RequestErr, gateway.ErrInvalidCredentials.Error())
+		return
+	}
+	groupID, err := getGroupIDFromRouter(c)
+	if err != nil {
+		errors_(c, RequestErr, err.Error())
+		return
+	}
 
+	sinceMs, err := strconv.ParseInt(c.Query("since"), 10, 64)
+	if err != nil {
+		errors_(c, RequestErr, "invalid since parameter")
+		return
+	}
+	sinceTime := time.UnixMilli(sinceMs)
+
+	limit, err := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	if err != nil {
+		errors_(c, RequestErr, "invalid limit parameter")
+		return
+	}
+
+	messages, err := s.gateway.HistoryGroupMessage(c, groupID, userID, sinceTime, limit)
+	if err != nil {
+		switch {
+		case errors.Is(err, gateway.ErrNotGroupMember):
+			errors_(c, RequestErr, err.Error())
+		default:
+			errors_(c, ServerErr, err.Error())
+		}
+		return
+	}
+	result(c, messages, OK)
 }
