@@ -4,12 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-
 	"github.com/Terry-Mao/goim/api/logic"
-	"github.com/Terry-Mao/goim/internal/gateway/model"
 	"github.com/Terry-Mao/goim/pkg/auth"
 	"golang.org/x/crypto/bcrypt"
+	"io"
 )
 
 // LoginResponse is the response body for POST /goim/auth/login.
@@ -24,11 +22,7 @@ func (g *Gateway) Register(ctx context.Context, username, password string) (any,
 	if err != nil {
 		return nil, err
 	}
-	user := &model.User{
-		Username: username,
-		Password: string(hash),
-	}
-	return nil, g.dao.CreateUser(ctx, user)
+	return g.dao.CreateUser(ctx, username, string(hash))
 }
 
 func (g *Gateway) Login(ctx context.Context, username, password string) (any, error) {

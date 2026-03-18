@@ -66,3 +66,20 @@ func (d *Dao) ListGroupMessagesSince(ctx context.Context, groupID int64, since t
 		Find(&messages).Error
 	return messages, err
 }
+
+// ListOfflineGroupMessages 查询用户在所有已加入群的离线消息
+// JOIN group_members 确保只返回用户当前所在群、加入后的消息
+func (d *Dao) ListOfflineGroupMessages(ctx context.Context, userID int64, since time.Time, limit int) ([]*model.GroupMessage, error) {
+	var messages []*model.GroupMessage
+	err := d.db.WithContext(ctx).
+		Table("group_messages AS msg").
+		Select("msg.*").
+		Joins("JOIN group_members AS mem ON msg.group_id = mem.group_id").
+		Where("mem.user_id = ?", userID).
+		Where("msg.created_at > ?", since).
+		Where("msg.created_at > mem.joined_at"). // 核心：过滤入群前的消息
+		Order("msg.created_at ASC").             // 通常离线消息按时间正序排列
+		Limit(limit).
+		Find(&messages).Error
+	return messages, err
+}

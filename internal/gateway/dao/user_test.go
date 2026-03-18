@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/Terry-Mao/goim/internal/gateway/conf"
 	"github.com/Terry-Mao/goim/internal/gateway/model"
@@ -35,11 +36,11 @@ func TestCreateUser(t *testing.T) {
 	d := testDao(t)
 	ctx := context.Background()
 
-	user := &model.User{Username: "alice", Password: "hashed_pw"}
-	if err := d.CreateUser(ctx, user); err != nil {
+	id, err := d.CreateUser(ctx, "alice", "hashed_pw")
+	if err != nil {
 		t.Fatalf("CreateUser failed: %v", err)
 	}
-	if user.ID == 0 {
+	if id == 0 {
 		t.Fatal("expected user.ID to be set after insert")
 	}
 }
@@ -48,13 +49,11 @@ func TestCreateUser_Duplicate(t *testing.T) {
 	d := testDao(t)
 	ctx := context.Background()
 
-	user1 := &model.User{Username: "bob", Password: "pw1"}
-	if err := d.CreateUser(ctx, user1); err != nil {
+	if _, err := d.CreateUser(ctx, "bob", "pw1"); err != nil {
 		t.Fatalf("first CreateUser failed: %v", err)
 	}
 
-	user2 := &model.User{Username: "bob", Password: "pw2"}
-	err := d.CreateUser(ctx, user2)
+	_, err := d.CreateUser(ctx, "bob", "pw2")
 	if !errors.Is(err, ErrDuplicateUsername) {
 		t.Fatalf("expected ErrDuplicateUsername, got: %v", err)
 	}
@@ -65,7 +64,7 @@ func TestGetUserByUsername(t *testing.T) {
 	ctx := context.Background()
 
 	// Insert a user first
-	d.CreateUser(ctx, &model.User{Username: "charlie", Password: "pw"})
+	d.CreateUser(ctx, "charlie", "pw")
 
 	user, err := d.GetUserByUsername(ctx, "charlie")
 	if err != nil {
@@ -93,9 +92,9 @@ func TestGetUsersByIDs(t *testing.T) {
 	u1 := &model.User{Username: "user1", Password: "pw"}
 	u2 := &model.User{Username: "user2", Password: "pw"}
 	u3 := &model.User{Username: "user3", Password: "pw"}
-	d.CreateUser(ctx, u1)
-	d.CreateUser(ctx, u2)
-	d.CreateUser(ctx, u3)
+	u1.ID, _ = d.CreateUser(ctx, u1.Username, u1.Password)
+	u2.ID, _ = d.CreateUser(ctx, u2.Username, u2.Password)
+	u3.ID, _ = d.CreateUser(ctx, u3.Username, u3.Password)
 
 	users, err := d.GetUsersByIDs(ctx, []int64{u1.ID, u3.ID})
 	if err != nil {
@@ -122,5 +121,65 @@ func TestGetUsersByIDs_Empty(t *testing.T) {
 	}
 	if len(users) != 0 {
 		t.Fatalf("expected 0 users, got %d", len(users))
+	}
+}
+
+func TestUpdateLastOnlineAt(t *testing.T) {
+	d := testDao(t)
+	ctx := context.Background()
+
+	user := &model.User{Username: "online_test", Password: "pw"}
+	user.ID, _ = d.CreateUser(ctx, user.Username, user.Password)
+
+	now := time.Now().Truncate(time.Second)
+	if err := d.UpdateLastOnlineAt(ctx, user.ID, now); err != nil {
+		t.Fatalf("UpdateLastOnlineAt failed: %v", err)
+	}
+
+	var got model.User
+	d.db.WithContext(ctx).First(&got, user.ID)
+	if !got.LastOnlineAt.Truncate(time.Second).Equal(now) {
+		t.Fatalf("expected LastOnlineAt %v, got %v", now, got.LastOnlineAt)
+	}
+}
+
+func TestUpdateLastAckAt(t *testing.T) {
+	d := testDao(t)
+	ctx := context.Background()
+
+	user := &model.User{Username: "ack_test", Password: "pw"}
+	user.ID, _ = d.CreateUser(ctx, user.Username, user.Password)
+
+	now := time.Now()
+	if err := d.UpdateLastAckAt(ctx, user.ID, now); err != nil {
+		t.Fatalf("UpdateLastAckAt failed: %v", err)
+	}
+
+	ackAt, err := d.GetLastAckAt(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("GetLastAckAt failed: %v", err)
+	}
+	// UnixMilliTime has millisecond precision, allow 1ms drift from DB round-trip
+	diff := ackAt.UnixMilli() - now.UnixMilli()
+	if diff < -1 || diff > 1 {
+		t.Fatalf("expected LastAckAt ~%d, got %d (diff=%d)", now.UnixMilli(), ackAt.UnixMilli(), diff)
+	}
+}
+
+func TestGetLastAckAt_NewUserHasInitValue(t *testing.T) {
+	d := testDao(t)
+	ctx := context.Background()
+
+	before := time.Now()
+	user := &model.User{Username: "new_user", Password: "pw"}
+	user.ID, _ = d.CreateUser(ctx, user.Username, user.Password)
+
+	ackAt, err := d.GetLastAckAt(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("GetLastAckAt failed: %v", err)
+	}
+	// CreateUser initializes LastAckAt to time.Now(), so it should be >= before
+	if ackAt.Before(before.Add(-time.Second)) {
+		t.Fatalf("expected LastAckAt near now, got %v", ackAt)
 	}
 }

@@ -436,9 +436,9 @@ examples/
 
 ## 实现顺序
 
-1. `internal/gateway/model/user.go` — User 模型加字段
-2. `internal/gateway/dao/user.go` — 新增 DAO 方法 + 测试
-3. `internal/gateway/dao/message.go` — 新增 ListOfflineGroupMessages + 测试
+1. `internal/gateway/model/user.go` — User 模型加字段 ✅
+2. `internal/gateway/dao/user.go` — 新增 DAO 方法 + 测试 ✅
+3. `internal/gateway/dao/message.go` — 新增 ListOfflineGroupMessages + 测试 ✅
 4. `internal/gateway/conf/conf.go` — 新增 ACK 配置
 5. `cmd/gateway/gateway-example.toml` — 新增配置段
 6. `internal/gateway/ack.go` — ACK 服务 + 测试
