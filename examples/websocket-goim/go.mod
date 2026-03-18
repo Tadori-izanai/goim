@@ -1,6 +1,6 @@
 module websocket-goim
 
-go 1.21
+go 1.24.0
 
 require (
 	github.com/Terry-Mao/goim v0.0.0

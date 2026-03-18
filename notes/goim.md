@@ -144,6 +144,8 @@ websocket api
 
  dao.go 通过 switch c.MQType 做工厂选择，调用方（produce.go）完全不感知具体实现
 
-
-
 dao <- gateway <- http
+
+bench/push_room 为什么丢消息?
+接收方用户在线时也可能收不到,? 此时并不触发 Logic POST Gateway /goim/internal/online
+Bob 为什么不在 /goim/auth/login 的时候, Gateway 直接 POST Logic /goim/push/mids

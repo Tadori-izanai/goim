@@ -60,10 +60,10 @@
 
 > 在单聊基础上增量很小，复用消息存储和推送链路
 
-- [ ] 数据库设计：`groups` 表、`group_members` 表、`group_messages` 表
-- [ ] 群组接口：创建群、加入群、退出群、群成员列表
-- [ ] 发群消息：Gateway 落库 → 调 Logic `/goim/push/room`（op=2002）
-- [ ] 客户端切换群：发送 `OpChangeRoom` 切换到对应群房间
+- [x] 数据库设计：`groups` 表、`group_members` 表、`group_messages` 表
+- [x] 群组接口：创建群、加入群、退出群、群成员列表
+- [x] 发群消息：Gateway 落库 → 调 Logic `/goim/push/room`（op=2002）
+- [x] ~~客户端切换群：发送 `OpChangeRoom` 切换到对应群房间~~
 
 ---
 
@@ -71,8 +71,8 @@
 
 - [ ] users 表加 `last_online_at`，记录用户上次在线时间
 - [ ] 单聊离线：上线时查 `messages WHERE to_id=? AND created_at > last_online_at`
-- [ ] 群聊离线：`user_rooms` 表记录每个群的已读位置，进群时拉取
-- [ ] （可选）ACK 机制：客户端确认收到，超时重发，保证可靠投递
+- [ ] 群聊离线：同 users, 查 `group_messages`
+- [ ] ACK 机制：客户端确认收到，超时重发，保证可靠投递
 
 ---
 
