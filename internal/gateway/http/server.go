@@ -71,4 +71,18 @@ func (s *Server) initRouter() {
 		groupGroup.POST(":group_id/chat", s.sendGroupMessage)
 		groupGroup.GET(":group_id/chat", s.historyGroupMessage)
 	}
+
+	groupSync := s.engine.Group("/goim/sync")
+	groupSync.Use(jwtHandler)
+	{
+		groupSync.GET("")
+		groupSync.POST("ack") // ack_at
+	}
+
+	groupInternal := s.engine.Group("/goim/internal")
+	{
+		groupInternal.POST("ack")         // msg_id
+		groupInternal.POST("undelivered") // mid, msg_id
+		groupInternal.POST("offline")     // mid
+	}
 }

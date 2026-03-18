@@ -28,6 +28,7 @@ func Default() *Config {
 	return &Config{
 		HTTPServer: &HTTPServer{Addr: ":3200"},
 		JWT:        &JWT{Secret: "change-me", ExpireHours: 24},
+		ACK:        &ACK{RetryInterval: 5, MaxRetries: 3},
 	}
 }
 
@@ -37,11 +38,17 @@ type Config struct {
 	MySQL      *MySQL
 	JWT        *JWT
 	Logic      *Logic
+	ACK        *ACK
 }
 
 // HTTPServer is http server config.
 type HTTPServer struct {
 	Addr string
+}
+
+type ACK struct {
+	RetryInterval int // # of seconds
+	MaxRetries    int
 }
 
 // MySQL is mysql config.

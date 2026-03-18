@@ -11,3 +11,7 @@
 
 [logic]
     addr = "http://localhost:3111"
+
+[ack]
+    retryInterval = 5
+    maxRetries = 3
