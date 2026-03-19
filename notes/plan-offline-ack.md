@@ -406,7 +406,7 @@ examples/
 15. `cmd/logic/logic-example.toml` — 加 [gateway] 配置 ✅
 16. `internal/logic/push.go` — PushMids 不在线通知 Gateway ✅
 17. `internal/logic/conn.go` — Disconnect 通知 Gateway ✅
-18. `examples/offline-demo/main.go` — 端到端 demo
+18. `examples/offline-demo/main.go` — 端到端 demo ✅
 
 ## 验证方式
 

@@ -69,10 +69,10 @@
 
 ## 阶段六：离线消息与 ACK
 
-- [ ] users 表加 `last_online_at`，记录用户上次在线时间
-- [ ] 单聊离线：上线时查 `messages WHERE to_id=? AND created_at > last_online_at`
-- [ ] 群聊离线：同 users, 查 `group_messages`
-- [ ] ACK 机制：客户端确认收到，超时重发，保证可靠投递
+- [x] users 表加 `last_online_at`，记录用户上次在线时间
+- [x] 单聊离线：上线时查 `messages WHERE to_id=? AND created_at > last_online_at`
+- [x] 群聊离线：同 users, 查 `group_messages`
+- [x] ACK 机制：客户端确认收到，超时重发，保证可靠投递
 
 ---
 
