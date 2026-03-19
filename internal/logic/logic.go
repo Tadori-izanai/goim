@@ -2,6 +2,7 @@ package logic
 
 import (
 	"context"
+	"net/http"
 	"strconv"
 	"time"
 
@@ -30,6 +31,8 @@ type Logic struct {
 	nodes        []*naming.Instance
 	loadBalancer *LoadBalancer
 	regions      map[string]string // province -> region
+	// gateway client
+	client *http.Client
 }
 
 // New init
@@ -40,6 +43,10 @@ func New(c *conf.Config) (l *Logic) {
 		dis:          naming.New(c.Discovery),
 		loadBalancer: NewLoadBalancer(),
 		regions:      make(map[string]string),
+		client: &http.Client{
+			Transport: &http.Transport{MaxIdleConnsPerHost: 32},
+			Timeout:   time.Second * 5,
+		},
 	}
 	l.initRegions()
 	l.initNodes()
@@ -158,4 +165,22 @@ func (l *Logic) loadOnline() (err error) {
 	}
 	l.roomCount = roomCount
 	return
+}
+
+func (l *Logic) notifyGateway(mid int64) {
+	if l.c.Gateway == nil || l.c.Gateway.Addr == "" {
+		return
+	}
+	targetURL := l.c.Gateway.Addr + "/goim/internal/offline/" + strconv.FormatInt(mid, 10)
+	req, err := http.NewRequest("POST", targetURL, nil)
+	if err != nil {
+		log.Errorf("new request failed: %v\n", err)
+		return
+	}
+	resp, err := l.client.Do(req)
+	if err != nil {
+		log.Errorf("notify gateway %s mid:%d error(%v)", targetURL, mid, err)
+		return
+	}
+	_ = resp.Body.Close()
 }

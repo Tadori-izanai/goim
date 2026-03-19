@@ -11,7 +11,7 @@
 
 **目标**：
 1. 客户端断线重连后，主动拉取离线消息（Pull 模式）
-2. 单聊消息增加 ACK 机制：Comet 推送成功后回调 Gateway 确认，超时未 ACK 则重推
+2. 单聊消息增加 ACK 机制：客户端收到消息后回调 Gateway 确认，超时未 ACK 则重推
 3. 群聊消息不做逐条 ACK，依赖客户端定期拉取兜底
 
 ## 整体架构
@@ -28,10 +28,9 @@
   推送链路:
     Gateway → Logic（查 Redis 找 mid 的 Comet 连接）
       → 找到: Job → Comet → channel.Push() → Bob WebSocket 收到
-               Comet POST Gateway /goim/internal/ack {"msg_id":"xxx"}  ← 新增
+               Bob 客户端 POST Gateway /goim/ack/:msg_id  ← 客户端发起
                → Gateway 从 pending map 移除，取消定时器
-      → 未找到: Logic POST Gateway /goim/internal/ack {"msg_id":"xxx"}  ← 复用同一接口
-               → Gateway 从 pending map 移除（消息在 DB，等 Bob Pull）
+      → 未找到: 消息在 DB，等 Bob Pull（Gateway 重试到 MaxRetries 后自然放弃）
 
   超时重试:
     5s 未收到 ACK → Gateway 重新 push 同一条消息 → 最多 3 次
@@ -59,14 +58,14 @@
 
 **设计要点**：
 
-- **单聊 ACK**：Gateway pending map 跟踪每条单聊消息的送达状态，Comet 推送成功后直接回调 Gateway
+- **单聊 ACK**：Gateway pending map 跟踪每条单聊消息的送达状态，客户端收到消息后 POST `/goim/ack/:msg_id` 确认
 - **离线消息 Pull**：客户端重连后主动拉取，不走 Logic/Comet 推送链路，路径短、可靠
 - **混合同步锚点**：`last_online_at`（断线时刻）+ `last_ack_at`（Pull 确认位点）
 - **ACK 粒度**：全局单一 `last_ack_at`，单聊 + 群聊共用
 - **消息去重**：客户端按 `msg_id` 去重（重试可能导致重复推送）
 - **群聊不做 ACK**：靠客户端定期 Pull 兜底，避免 pending map 膨胀
-- **接口简化**：`/ack` 和 `/undelivered` 合并为一个 `/ack` 接口，Comet 和 Logic 都调用它
-- **解耦设计**：ackService 通过 `messagePusher` 接口依赖 Gateway，避免循环依赖
+- **接口简化**：ACK 由客户端发起，无需 JWT（msgID 本身是唯一标识），对 goim Comet 零改动
+- **解耦设计**：ackService 通过 push 回调依赖 Gateway，避免循环依赖
 - **性能优化**：midMap 反向索引加速 UserOffline 批量清除，O(k) 复杂度
 
 ## 数据库变更
@@ -90,67 +89,20 @@ type User struct {
 - `LastAckAt`：客户端 ACK 时更新，作为离线消息查询的起点
 - 注册时 `LastAckAt` 初始化为当前时间（避免新用户拉到全量历史）
 
-## Comet 改动（1 个文件）
-
-### internal/comet/grpc/server.go（或 internal/comet/operation.go）
-
-Comet 推送消息给客户端成功后，异步 POST Gateway 确认送达。
-
-改动点：在 `PushMsg` 处理中，`channel.Push(proto)` 成功后，异步通知 Gateway。
-
-```go
-// 推送成功后回调 Gateway
-go notifyGatewayAck(gatewayAddr, msgID)
-
-func notifyGatewayAck(addr, msgID string) {
-    body, _ := json.Marshal(map[string]string{"msg_id": msgID})
-    resp, err := http.Post(addr+"/goim/internal/ack", "application/json", bytes.NewReader(body))
-    if err != nil {
-        log.Errorf("notify gateway ack msg_id:%s error(%v)", msgID, err)
-        return
-    }
-    resp.Body.Close()
-}
-```
-
-需要从 push body 中提取 msg_id。Comet 配置需新增 Gateway 地址。
-
-### internal/comet/conf/conf.go
-
-```go
-type Config struct {
-    // ... 现有字段
-    Gateway *Gateway
-}
-
-type Gateway struct {
-    Addr string
-}
-```
-
-### cmd/comet/comet-example.toml
-
-```toml
-[gateway]
-    addr = "http://localhost:3200"
-```
-
 ## Logic 改动（2 个文件）
 
 ### internal/logic/push.go
 
-`PushMids` 中，当 `KeysByMids` 查不到目标 mid 时（用户不在线），POST Gateway `/goim/internal/ack` 通知：
+`PushMids` 中，当 `KeysByMids` 查不到目标 mid 时（用户不在线），POST Gateway `/goim/internal/offline/:mid` 通知停止重试：
 
 ```go
 func (l *Logic) PushMids(c context.Context, op int32, mids []int64, msg []byte) error {
     keysByMid, _, err := l.dao.KeysByMids(c, mids)
     // ...
-    // 新增：找出不在线的 mid，通知 Gateway（复用 /ack 接口）
-    // 需要从 msg 中提取 msg_id
+    // 新增：找出不在线的 mid，通知 Gateway 停止重试
     for _, mid := range mids {
         if !isOnline(mid, keysByMid) {
-            msgID := extractMsgID(msg)  // 从 push body 提取 msg_id
-            go l.notifyGatewayAck(msgID)
+            go l.notifyGateway("/goim/internal/offline/"+strconv.FormatInt(mid, 10), mid)
         }
     }
     // ... 原有推送逻辑
@@ -222,7 +174,7 @@ type pendingMsg struct {
 // Track 发送单聊消息后调用，记入 pending 并启动超时定时器
 func (s *ackService) Track(msgID string, mid int64, op int32, body []byte)
 
-// Ack 确认消息已处理（Comet 推送成功 OR Logic 发现不在线），从 pending 移除
+// Ack 确认消息已处理（客户端收到消息后调用），从 pending 移除
 // 合并了原 Ack 和 Undelivered 两个方法，简化接口
 func (s *ackService) Ack(msgID string)
 
@@ -334,20 +286,11 @@ ORDER BY gm.created_at LIMIT ?
 
 ## Gateway 新增 HTTP 接口
 
-### 内部接口（Comet/Logic → Gateway 回调，无需 JWT）
+### 内部接口（Logic → Gateway 回调，无需 JWT）
 
 | 接口 | 方法 | 说明 |
 |------|------|------|
-| `/goim/internal/ack` | POST | Comet 推送成功 OR Logic 发现不在线 |
 | `/goim/internal/offline` | POST | Logic 用户断连通知 |
-
-**POST /goim/internal/ack**
-
-请求：`{"msg_id": "xxx"}`
-处理：`ackService.Ack(msgID)` → 从 pending 移除，取消定时器
-调用方：
-- Comet：推送成功后调用
-- Logic：`PushMids` 发现目标 mid 不在线时调用（消息在 DB，等 Pull）
 
 **POST /goim/internal/offline**
 
@@ -356,12 +299,19 @@ ORDER BY gm.created_at LIMIT ?
 1. `ackService.UserOffline(mid)` → 批量清除该 mid 的 pending
 2. `dao.UpdateLastOnlineAt(mid, now)`
 
-### 外部接口（客户端调用，需 JWT）
+### 外部接口（客户端调用）
 
-| 接口 | 方法 | 说明 |
-|------|------|------|
-| `/goim/sync` | GET | 拉取离线消息 |
-| `/goim/sync/ack` | POST | 确认已收到，更新 last_ack_at |
+| 接口 | 方法 | 认证 | 说明 |
+|------|------|------|------|
+| `/goim/ack/:msg_id` | POST | 无 | 客户端确认收到单聊消息 |
+| `/goim/sync` | GET | JWT | 拉取离线消息 |
+| `/goim/sync/ack` | POST | JWT | 确认已收到，更新 last_ack_at |
+
+**POST /goim/ack/:msg_id**
+
+处理：`ackService.Ack(msgID)` → 从 pending 移除，取消定时器
+调用方：客户端收到 WebSocket 推送的单聊消息后调用
+无需 JWT：msgID 本身是唯一标识，不涉及用户数据
 
 **GET /goim/sync**
 
@@ -411,7 +361,7 @@ internal/gateway/
 
 internal/gateway/http/
     sync.go                     # GET /goim/sync + POST /goim/sync/ack handler
-    internal.go                 # /goim/internal/* handler
+    internal.go                 # POST /goim/internal/offline handler
 
 examples/
     offline-demo/main.go        # 端到端测试 demo
@@ -428,17 +378,14 @@ examples/
 | `internal/gateway/gateway.go` | Gateway 新增 ackService |
 | `internal/gateway/chat.go` | SendMessage 后调用 ack.Track() |
 | `internal/gateway/auth.go` | LoginResponse 加 LastAckAt；Register 初始化 LastAckAt |
-| `internal/gateway/http/server.go` | 新增 /goim/sync 和 /goim/internal 路由 |
+| `internal/gateway/http/server.go` | 新增 /goim/ack、/goim/sync 和 /goim/internal 路由 |
 | `cmd/gateway/gateway-example.toml` | 新增 [ack] 配置段 |
-| `internal/comet/grpc/server.go` | PushMsg 成功后 POST Gateway /goim/internal/ack |
-| `internal/comet/conf/conf.go` | Config 新增 Gateway 地址 |
-| `cmd/comet/comet-example.toml` | 新增 [gateway] 配置段 |
-| `internal/logic/push.go` | PushMids 中不在线的 mid POST Gateway /goim/internal/undelivered |
-| `internal/logic/conn.go` | Disconnect 新增 POST Gateway /goim/internal/offline |
+| `internal/logic/push.go` | PushMids 中不在线的 mid POST Gateway /goim/internal/offline/:mid |
+| `internal/logic/conn.go` | Disconnect 新增 POST Gateway /goim/internal/offline/:mid |
 | `internal/logic/conf/conf.go` | Config 新增 Gateway 地址 |
 | `cmd/logic/logic-example.toml` | 新增 [gateway] 配置段 |
 
-**goim 改动范围**：Comet 2 文件 + Logic 3 文件 + 2 配置文件，均为追加式改动
+**goim 改动范围**：Logic 3 文件 + 1 配置文件，均为追加式改动（Comet 零改动）
 
 ## 实现顺序
 
@@ -452,38 +399,36 @@ examples/
 8. `internal/gateway/gateway.go` — 集成 ackService ✅
 9. `internal/gateway/chat.go` — SendMessage 后 Track ✅
 10. `internal/gateway/auth.go` — Login 响应加 LastAckAt，Register 初始化 LastAckAt ✅
-11. `internal/gateway/http/internal.go` — 内部回调 handler ✅
+11. `internal/gateway/http/internal.go` — 内部回调 handler（仅 /offline） ✅
 12. `internal/gateway/http/sync.go` — Pull + ACK handler ✅
-13. `internal/gateway/http/server.go` — 注册新路由 ✅
-14. `internal/comet/conf/conf.go` — Config 加 Gateway 地址
-15. `cmd/comet/comet-example.toml` — 加 [gateway] 配置
-16. `internal/comet/grpc/server.go` — PushMsg 成功后回调 Gateway
-17. `internal/logic/conf/conf.go` — Config 加 Gateway 地址
-18. `cmd/logic/logic-example.toml` — 加 [gateway] 配置
-19. `internal/logic/push.go` — PushMids 不在线通知 Gateway
-20. `internal/logic/conn.go` — Disconnect 通知 Gateway
-21. `examples/offline-demo/main.go` — 端到端 demo
+13. `internal/gateway/http/server.go` — 注册新路由（含 /goim/ack/:msg_id） ✅
+14. `internal/logic/conf/conf.go` — Config 加 Gateway 地址 ✅
+15. `cmd/logic/logic-example.toml` — 加 [gateway] 配置 ✅
+16. `internal/logic/push.go` — PushMids 不在线通知 Gateway ✅
+17. `internal/logic/conn.go` — Disconnect 通知 Gateway ✅
+18. `examples/offline-demo/main.go` — 端到端 demo
 
 ## 验证方式
 
 ```bash
 # 前置：启动 goim 全套 + gateway
-# comet-example.toml 配置 [gateway] addr
 # logic-example.toml 配置 [gateway] addr
 # gateway-example.toml 配置 [ack] 段
 
 # === 单聊 ACK 测试 ===
 
 # 1. Alice 发消息给在线的 Bob
-#    → Gateway push → Comet 推送成功 → POST /goim/internal/ack
+#    → Gateway push → Comet 推送 → Bob WebSocket 收到
+#    → Bob 客户端 POST /goim/ack/:msg_id
 #    → pending 清除 ✓
 
 # 2. Alice 发消息给离线的 Bob
-#    → Gateway push → Logic 查不到 Bob → POST /goim/internal/undelivered
-#    → pending 清除 ✓（消息在 DB）
+#    → Gateway push → 无 ACK → 5s 超时 → 重推 → 最多 3 次
+#    → 3 次后放弃（消息在 DB，等 Bob Pull）
 
-# 3. Alice 发消息，Comet signal 满导致丢失
-#    → 无 ACK 回调 → 5s 超时 → Gateway 重推 → 最多 3 次
+# 3. Bob 断线
+#    → Logic.Disconnect() → POST /goim/internal/offline
+#    → Gateway 批量清除 Bob 的所有 pending ✓
 
 # === 离线 Pull 测试 ===
 

@@ -58,3 +58,6 @@ MQType = "nats"
     writeTimeout = "500ms"
     idleTimeout = "120s"
     expire = "30m"
+
+[gateway]
+    addr = "http://localhost:3200"

@@ -31,10 +31,12 @@ func (l *Logic) PushKeys(c context.Context, op int32, keys []string, msg []byte)
 
 // PushMids push a message by mid.
 func (l *Logic) PushMids(c context.Context, op int32, mids []int64, msg []byte) (err error) {
-	keyServers, _, err := l.dao.KeysByMids(c, mids)
+	keyServers, olMids, err := l.dao.KeysByMids(c, mids)
 	if err != nil {
 		return
 	}
+	l.offlineMids(mids, olMids)
+
 	keys := make(map[string][]string)
 	for key, server := range keyServers {
 		if key == "" || server == "" {
@@ -49,6 +51,18 @@ func (l *Logic) PushMids(c context.Context, op int32, mids []int64, msg []byte) 
 		}
 	}
 	return
+}
+
+func (l *Logic) offlineMids(mids, olMids []int64) {
+	onlineSet := make(map[int64]bool, len(olMids))
+	for _, mid := range olMids {
+		onlineSet[mid] = true
+	}
+	for _, mid := range mids {
+		if !onlineSet[mid] {
+			go l.notifyGateway(mid)
+		}
+	}
 }
 
 // PushRoom push a message by room.

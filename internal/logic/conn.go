@@ -45,6 +45,10 @@ func (l *Logic) Disconnect(c context.Context, mid int64, key, server string) (ha
 		return
 	}
 	log.Infof("conn disconnected key:%s server:%s mid:%d", key, server, mid)
+
+	if has {
+		go l.notifyGateway(mid)
+	}
 	return
 }
 
