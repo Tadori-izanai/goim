@@ -35,11 +35,19 @@ func (g *Gateway) SendMessage(c context.Context, fromID, toID int64, contentType
 		"timestamp":    time.Now().UnixMilli(),
 	})
 	err = g.postMessageToLogic(toID, pushBody)
+	g.track(msgID, toID, pushBody)
 	return msgID, err
 }
 
 func (g *Gateway) postMessageToLogic(toID int64, msg []byte) error {
 	return g.pushToMids(protocol.OpSingleChatMsg, []int64{toID}, msg)
+}
+
+func (g *Gateway) track(msgID string, mid int64, msg []byte) {
+	push := func(op int32, mid int64, msg []byte) {
+		_ = g.pushToMids(op, []int64{mid}, msg)
+	}
+	go g.ack.Track(msgID, mid, protocol.OpSingleChatMsg, msg, push)
 }
 
 func (g *Gateway) pushToMids(op int32, mids []int64, msg []byte) error {

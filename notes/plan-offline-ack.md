@@ -30,7 +30,7 @@
       → 找到: Job → Comet → channel.Push() → Bob WebSocket 收到
                Comet POST Gateway /goim/internal/ack {"msg_id":"xxx"}  ← 新增
                → Gateway 从 pending map 移除，取消定时器
-      → 未找到: Logic POST Gateway /goim/internal/undelivered {"mid":bob,"msg_id":"xxx"}
+      → 未找到: Logic POST Gateway /goim/internal/ack {"msg_id":"xxx"}  ← 复用同一接口
                → Gateway 从 pending map 移除（消息在 DB，等 Bob Pull）
 
   超时重试:
@@ -65,6 +65,9 @@
 - **ACK 粒度**：全局单一 `last_ack_at`，单聊 + 群聊共用
 - **消息去重**：客户端按 `msg_id` 去重（重试可能导致重复推送）
 - **群聊不做 ACK**：靠客户端定期 Pull 兜底，避免 pending map 膨胀
+- **接口简化**：`/ack` 和 `/undelivered` 合并为一个 `/ack` 接口，Comet 和 Logic 都调用它
+- **解耦设计**：ackService 通过 `messagePusher` 接口依赖 Gateway，避免循环依赖
+- **性能优化**：midMap 反向索引加速 UserOffline 批量清除，O(k) 复杂度
 
 ## 数据库变更
 
@@ -136,16 +139,18 @@ type Gateway struct {
 
 ### internal/logic/push.go
 
-`PushMids` 中，当 `KeysByMids` 查不到目标 mid 时（用户不在线），POST Gateway 通知：
+`PushMids` 中，当 `KeysByMids` 查不到目标 mid 时（用户不在线），POST Gateway `/goim/internal/ack` 通知：
 
 ```go
 func (l *Logic) PushMids(c context.Context, op int32, mids []int64, msg []byte) error {
     keysByMid, _, err := l.dao.KeysByMids(c, mids)
     // ...
-    // 新增：找出不在线的 mid，通知 Gateway
+    // 新增：找出不在线的 mid，通知 Gateway（复用 /ack 接口）
+    // 需要从 msg 中提取 msg_id
     for _, mid := range mids {
         if !isOnline(mid, keysByMid) {
-            go l.notifyGatewayUndelivered(mid, msg)
+            msgID := extractMsgID(msg)  // 从 push body 提取 msg_id
+            go l.notifyGatewayAck(msgID)
         }
     }
     // ... 原有推送逻辑
@@ -189,10 +194,16 @@ func (l *Logic) notifyGateway(path string, mid int64) {
 ### 1. ACK 服务 — `internal/gateway/ack.go`
 
 ```go
+// messagePusher 接口解耦循环依赖（ackService 不直接依赖 Gateway）
+type messagePusher interface {
+    pushToMids(op int32, mids []int64, body []byte) error
+}
+
 type ackService struct {
     mu      sync.Mutex
-    pending map[string]*pendingMsg  // msg_id → pending state
-    gateway *Gateway
+    pending map[string]*pendingMsg  // msgID → pending state
+    midMap  map[int64][]string      // mid → msgIDs (反向索引，加速 UserOffline)
+    pusher  messagePusher           // 依赖接口而非具体类型
     conf    *conf.ACK
 }
 
@@ -211,30 +222,28 @@ type pendingMsg struct {
 // Track 发送单聊消息后调用，记入 pending 并启动超时定时器
 func (s *ackService) Track(msgID string, mid int64, op int32, body []byte)
 
-// Ack Comet 回调，确认消息已送达客户端
+// Ack 确认消息已处理（Comet 推送成功 OR Logic 发现不在线），从 pending 移除
+// 合并了原 Ack 和 Undelivered 两个方法，简化接口
 func (s *ackService) Ack(msgID string)
-
-// Undelivered Logic 回调，目标用户不在线
-func (s *ackService) Undelivered(msgID string)
 
 // UserOffline Logic 断连回调，批量清除该 mid 的所有 pending
 func (s *ackService) UserOffline(mid int64)
 ```
 
 **Track 流程**：
-1. 存入 pending map
+1. 存入 pending map 和 midMap 反向索引
 2. 启动定时器（默认 5s）
 3. 超时触发：retries++ → 重新 push → 重置定时器
 4. 达到 MaxRetries → 移除 pending
 
-**Ack 流程**：
+**Ack 流程**（统一处理成功送达和用户离线两种情况）：
 1. 从 pending map 查找 msg_id
 2. 取消定时器
-3. 移除 pending
+3. 从 pending 和 midMap 移除
 
-**UserOffline 流程**：
-1. 遍历 pending map，找出所有 mid 匹配的条目
-2. 取消定时器，移除 pending
+**UserOffline 流程**（O(k) 复杂度，k 为该 mid 的消息数）：
+1. 从 midMap 查找该 mid 的所有 msgID（O(1)）
+2. 逐个取消定时器，从 pending 和 midMap 移除（O(k)）
 
 ### 2. 离线同步 — `internal/gateway/sync.go`
 
@@ -329,19 +338,16 @@ ORDER BY gm.created_at LIMIT ?
 
 | 接口 | 方法 | 说明 |
 |------|------|------|
-| `/goim/internal/ack` | POST | Comet 推送成功回调 |
-| `/goim/internal/undelivered` | POST | Logic 发现目标不在线 |
+| `/goim/internal/ack` | POST | Comet 推送成功 OR Logic 发现不在线 |
 | `/goim/internal/offline` | POST | Logic 用户断连通知 |
 
 **POST /goim/internal/ack**
 
 请求：`{"msg_id": "xxx"}`
 处理：`ackService.Ack(msgID)` → 从 pending 移除，取消定时器
-
-**POST /goim/internal/undelivered**
-
-请求：`{"mid": 12345, "msg_id": "xxx"}`
-处理：`ackService.Undelivered(msgID)` → 从 pending 移除（消息在 DB，等 Pull）
+调用方：
+- Comet：推送成功后调用
+- Logic：`PushMids` 发现目标 mid 不在线时调用（消息在 DB，等 Pull）
 
 **POST /goim/internal/offline**
 
@@ -441,10 +447,10 @@ examples/
 3. `internal/gateway/dao/message.go` — 新增 ListOfflineGroupMessages + 测试 ✅
 4. `internal/gateway/conf/conf.go` — 新增 ACK 配置 ✅
 5. `cmd/gateway/gateway-example.toml` — 新增配置段 ✅
-6. `internal/gateway/ack.go` — ACK 服务 + 测试
+6. `internal/gateway/ack.go` — ACK 服务 + 测试 ✅
 7. `internal/gateway/sync.go` — 离线同步逻辑 + 测试
-8. `internal/gateway/gateway.go` — 集成 ackService
-9. `internal/gateway/chat.go` — SendMessage 后 Track
+8. `internal/gateway/gateway.go` — 集成 ackService ✅
+9. `internal/gateway/chat.go` — SendMessage 后 Track ✅
 10. `internal/gateway/auth.go` — Login 响应加 LastAckAt，Register 初始化 LastAckAt
 11. `internal/gateway/http/internal.go` — 内部回调 handler
 12. `internal/gateway/http/sync.go` — Pull + ACK handler

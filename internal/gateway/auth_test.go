@@ -52,7 +52,7 @@ func testGateway(t *testing.T) (*Gateway, *httptest.Server) {
 	d.Exec("DELETE FROM messages")
 	d.Exec("DELETE FROM users")
 
-	g := &Gateway{c: c, dao: d, client: &http.Client{}}
+	g := &Gateway{c: c, dao: d, client: &http.Client{}, ack: newAckService(conf.Default().ACK)}
 	t.Cleanup(func() {
 		logicSrv.Close()
 		d.Close()

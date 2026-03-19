@@ -13,6 +13,7 @@ type Gateway struct {
 	c      *conf.Config
 	dao    *dao.Dao
 	client *http.Client
+	ack    *ackService
 }
 
 func New(c *conf.Config) *Gateway {
@@ -25,6 +26,7 @@ func New(c *conf.Config) *Gateway {
 			},
 			Timeout: 5 * time.Second,
 		},
+		ack: newAckService(c.ACK),
 	}
 	return g
 }
