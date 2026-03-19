@@ -42,6 +42,7 @@ func testGateway(t *testing.T) (*Gateway, *httptest.Server) {
 		},
 		JWT:   &conf.JWT{Secret: "test-secret", ExpireHours: 1},
 		Logic: &conf.Logic{Addr: logicSrv.URL},
+		ACK:   &conf.ACK{RetryInterval: 5, MaxRetries: 3},
 	}
 	d := dao.New(c)
 	// Clean users table

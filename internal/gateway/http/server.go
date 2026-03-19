@@ -75,13 +75,13 @@ func (s *Server) initRouter() {
 	groupSync := s.engine.Group("/goim/sync")
 	groupSync.Use(jwtHandler)
 	{
-		groupSync.GET("")     // ? since, limit
-		groupSync.POST("ack") // ack_at
+		groupSync.GET("", s.syncMessages) // ? since, limit
+		groupSync.POST("/ack", s.syncAck) // {ack_at}
 	}
 
 	groupInternal := s.engine.Group("/goim/internal")
 	{
-		groupInternal.POST("ack/:msg_id")
-		groupInternal.POST("offline/:mid")
+		groupInternal.POST("/ack/:msg_id")
+		groupInternal.POST("/offline/:mid")
 	}
 }
