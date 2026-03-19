@@ -78,6 +78,8 @@ docker run -d --name mysql \
     mysql:latest
 
 docker exec -it mysql mysql -uroot -ppassword -e "SHOW DATABASES;"
+
+docker run -d --name=prometheus -p 9090:9090 prom/prometheus
 ```
 
 ```sh
