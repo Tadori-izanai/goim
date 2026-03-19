@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/Terry-Mao/goim/api/logic"
+	"github.com/Terry-Mao/goim/internal/gateway/model"
 	"github.com/Terry-Mao/goim/pkg/auth"
 	"golang.org/x/crypto/bcrypt"
 	"io"
@@ -12,9 +13,10 @@ import (
 
 // LoginResponse is the response body for POST /goim/auth/login.
 type LoginResponse struct {
-	ID    int64             `json:"id"`
-	Token string            `json:"token"`
-	Nodes *logic.NodesReply `json:"nodes"`
+	ID        int64               `json:"id"`
+	Token     string              `json:"token"`
+	Nodes     *logic.NodesReply   `json:"nodes"`
+	LastAckAt model.UnixMilliTime `json:"last_ack_at"`
 }
 
 func (g *Gateway) Register(ctx context.Context, username, password string) (any, error) {
@@ -41,7 +43,16 @@ func (g *Gateway) Login(ctx context.Context, username, password string) (any, er
 	if err != nil {
 		return nil, err
 	}
-	return &LoginResponse{ID: user.ID, Token: token, Nodes: nodes}, nil
+	t, err := g.dao.GetLastAckAt(ctx, user.ID)
+	if err != nil {
+		return nil, err
+	}
+	return &LoginResponse{
+		ID:        user.ID,
+		Token:     token,
+		Nodes:     nodes,
+		LastAckAt: model.UnixMilliTime(t),
+	}, nil
 }
 
 // getNodes calls Logic's GET /goim/nodes/weighted to get comet node list.

@@ -451,8 +451,8 @@ examples/
 7. `internal/gateway/sync.go` — 离线同步逻辑 + 测试 ✅
 8. `internal/gateway/gateway.go` — 集成 ackService ✅
 9. `internal/gateway/chat.go` — SendMessage 后 Track ✅
-10. `internal/gateway/auth.go` — Login 响应加 LastAckAt，Register 初始化 LastAckAt
-11. `internal/gateway/http/internal.go` — 内部回调 handler
+10. `internal/gateway/auth.go` — Login 响应加 LastAckAt，Register 初始化 LastAckAt ✅
+11. `internal/gateway/http/internal.go` — 内部回调 handler ✅
 12. `internal/gateway/http/sync.go` — Pull + ACK handler ✅
 13. `internal/gateway/http/server.go` — 注册新路由 ✅
 14. `internal/comet/conf/conf.go` — Config 加 Gateway 地址

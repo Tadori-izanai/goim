@@ -81,7 +81,7 @@ func (s *Server) initRouter() {
 
 	groupInternal := s.engine.Group("/goim/internal")
 	{
-		groupInternal.POST("/ack/:msg_id")
-		groupInternal.POST("/offline/:mid")
+		groupInternal.POST("/ack/:msg_id", s.ack)
+		groupInternal.POST("/offline/:mid", s.userOffline)
 	}
 }

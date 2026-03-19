@@ -3,9 +3,11 @@ package gateway
 import (
 	"context"
 	"encoding/json"
+	"github.com/Terry-Mao/goim/internal/gateway/model"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/Terry-Mao/goim/internal/gateway/conf"
 	"github.com/Terry-Mao/goim/internal/gateway/dao"
@@ -146,5 +148,58 @@ func TestLogin_UserNotFound(t *testing.T) {
 	_, err := g.Login(ctx, "nobody", "pw")
 	if err != ErrInvalidCredentials {
 		t.Fatalf("expected ErrInvalidCredentials, got: %v", err)
+	}
+}
+
+func TestLogin_LastAckAtAfterSync(t *testing.T) {
+	g, _ := testGateway(t)
+	ctx := context.Background()
+
+	g.Register(ctx, "eve", "pw")
+	eveID := g.mustLoginID(t, ctx, "eve", "pw")
+
+	// SyncAck to set last_ack_at
+	ackTime := time.Now().Truncate(time.Millisecond)
+	g.SyncAck(ctx, eveID, ackTime)
+
+	// Login again, should see updated last_ack_at
+	res, err := g.Login(ctx, "eve", "pw")
+	if err != nil {
+		t.Fatalf("Login failed: %v", err)
+	}
+	loginResp := res.(*LoginResponse)
+	got := time.Time(loginResp.LastAckAt).Truncate(time.Millisecond)
+	if !got.Equal(ackTime) {
+		t.Fatalf("expected last_ack_at=%v, got %v", ackTime, got)
+	}
+}
+
+func TestLogin_LastAckAtJSON(t *testing.T) {
+	g, _ := testGateway(t)
+	ctx := context.Background()
+
+	g.Register(ctx, "frank", "pw")
+	frankID := g.mustLoginID(t, ctx, "frank", "pw")
+
+	ackTime := time.UnixMilli(1710000000000)
+	g.SyncAck(ctx, frankID, ackTime)
+
+	res, err := g.Login(ctx, "frank", "pw")
+	if err != nil {
+		t.Fatalf("Login failed: %v", err)
+	}
+	loginResp := res.(*LoginResponse)
+
+	// Verify JSON serialization is millisecond timestamp
+	data, _ := json.Marshal(loginResp.LastAckAt)
+	if string(data) != "1710000000000" {
+		t.Fatalf("expected JSON 1710000000000, got %s", data)
+	}
+
+	// Verify round-trip
+	var parsed model.UnixMilliTime
+	json.Unmarshal(data, &parsed)
+	if !time.Time(parsed).Equal(ackTime) {
+		t.Fatalf("round-trip failed: expected %v, got %v", ackTime, time.Time(parsed))
 	}
 }
