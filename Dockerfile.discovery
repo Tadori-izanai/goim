@@ -1,0 +1,12 @@
+FROM golang:1.24-alpine AS builder
+RUN apk add --no-cache git
+RUN git clone https://github.com/bilibili/discovery.git /src
+WORKDIR /src
+# discovery 用的是旧版 Go modules，需要处理
+RUN GO111MODULE=on go build -o /bin/discovery cmd/discovery/main.go
+
+FROM alpine:3.20
+COPY --from=builder /bin/discovery /bin/discovery
+EXPOSE 7171
+ENTRYPOINT ["/bin/discovery"]
+CMD ["-conf", "/etc/discovery/discovery.toml"]

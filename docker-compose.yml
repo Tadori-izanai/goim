@@ -1,0 +1,165 @@
+services:
+
+  # ── 中间件 ──
+
+  mysql:
+    image: mysql:latest
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: goim
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 5
+
+  nats:
+    image: nats:latest
+    ports:
+      - "4222:4222"
+      - "6222:6222"
+      - "8222:8222"
+    command: ["--jetstream"]
+
+  # 如果你想用 Kafka 而不是 NATS，取消下面的注释
+  zookeeper:
+    image: zookeeper:latest
+    ports:
+      - "2181:2181"
+
+  kafka:
+    image: wurstmeister/kafka:latest
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+    depends_on:
+      - zookeeper
+
+  discovery:
+    build:
+      context: .
+      dockerfile: Dockerfile.discovery
+    ports:
+      - "7171:7171"
+    volumes:
+      - ./docker/discovery.toml:/etc/discovery/discovery.toml
+
+  # ── GoIM 服务 ──
+
+  comet:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: comet
+    restart: on-failure
+    ports:
+      - "3101:3101"
+      - "3102:3102"
+      - "3109:3109"
+      - "9100:9100"
+    volumes:
+      - ./docker/comet.toml:/etc/goim/comet.toml
+    command: [
+      "-conf", "/etc/goim/comet.toml",
+      "-region", "sh",
+      "-zone", "sh001",
+      "-deploy.env", "dev",
+      "-weight", "10",
+      "-addrs", "comet",
+      "-debug", "true",
+      "-alsologtostderr"
+    ]
+    depends_on:
+      - discovery
+      - nats
+
+  logic:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: logic
+    restart: on-failure
+    ports:
+      - "3111:3111"
+      - "3119:3119"
+    volumes:
+      - ./docker/logic.toml:/etc/goim/logic.toml
+    command: [
+      "-conf", "/etc/goim/logic.toml",
+      "-region", "sh",
+      "-zone", "sh001",
+      "-deploy.env", "dev",
+      "-weight", "10",
+      "-alsologtostderr"
+    ]
+    depends_on:
+      - discovery
+      - redis
+      - nats
+
+  job:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: job
+    restart: on-failure
+    ports:
+      - "9101:9101"
+    volumes:
+      - ./docker/job.toml:/etc/goim/job.toml
+    command: [
+      "-conf", "/etc/goim/job.toml",
+      "-region", "sh",
+      "-zone", "sh001",
+      "-deploy.env", "dev",
+      "-alsologtostderr"
+    ]
+    depends_on:
+      - discovery
+      - nats
+
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: gateway
+    restart: on-failure
+    ports:
+      - "3200:3200"
+    volumes:
+      - ./docker/gateway.toml:/etc/goim/gateway.toml
+    command: ["-conf", "/etc/goim/gateway.toml", "-alsologtostderr"]
+    depends_on:
+      mysql:
+        condition: service_healthy
+      logic:
+        condition: service_started
+
+  # ── 监控 ──
+
+  prometheus:
+    image: prom/prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml
+
+volumes:
+  mysql-data:

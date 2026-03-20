@@ -1,0 +1,14 @@
+# This is a TOML document. Boom
+MQType = "nats"
+
+[discovery]
+    nodes = ["discovery:7171"]
+
+[kafka]
+    topic = "goim-push-topic"
+    group = "goim-push-group-job"
+    brokers = ["kafka:9092"]
+
+[Nats]
+    Subject = "goim-push"
+    Addr = "nats://nats:4222"
