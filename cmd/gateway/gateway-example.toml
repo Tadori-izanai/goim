@@ -13,5 +13,6 @@
     addr = "http://localhost:3111"
 
 [ack]
+    enabled = true
     retryInterval = 5
     maxRetries = 3

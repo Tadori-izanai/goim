@@ -44,6 +44,9 @@ func (g *Gateway) postMessageToLogic(toID int64, msg []byte) error {
 }
 
 func (g *Gateway) track(msgID string, mid int64, msg []byte) {
+	if !g.c.ACK.Enabled {
+		return
+	}
 	push := func(op int32, mid int64, msg []byte) {
 		_ = g.pushToMids(op, []int64{mid}, msg)
 	}

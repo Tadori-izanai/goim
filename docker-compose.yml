@@ -83,7 +83,7 @@ services:
       "-deploy.env", "dev",
       "-weight", "10",
       "-addrs", "comet",
-      "-debug", "true",
+#      "-debug", "true",
       "-alsologtostderr"
     ]
     depends_on:

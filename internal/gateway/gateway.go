@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"net"
 	"net/http"
 	"time"
 
@@ -22,7 +23,13 @@ func New(c *conf.Config) *Gateway {
 		dao: dao.New(c),
 		client: &http.Client{
 			Transport: &http.Transport{
-				MaxIdleConnsPerHost: 32,
+				MaxIdleConns:        256,
+				MaxIdleConnsPerHost: 256,
+				IdleConnTimeout:     90 * time.Second,
+				DialContext: (&net.Dialer{
+					Timeout:   5 * time.Second,
+					KeepAlive: 30 * time.Second,
+				}).DialContext,
 			},
 			Timeout: 5 * time.Second,
 		},

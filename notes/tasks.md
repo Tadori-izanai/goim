@@ -78,9 +78,9 @@
 
 ## 阶段七：Docker 化部署
 
-- [ ] 为每个服务编写 Dockerfile（Comet、Logic、Job、业务 API）
-- [ ] 编写 docker-compose.yml，编排所有服务 + 中间件（MySQL、Redis、NATS、Discovery）
-- [ ] 端到端测试：WebSocket 客户端收发消息验证
+- [x] 为每个服务编写 Dockerfile（Comet、Logic、Job、业务 API）
+- [x] 编写 docker-compose.yml，编排所有服务 + 中间件（MySQL、Redis、NATS、Discovery）
+- [x] 端到端测试：WebSocket 客户端收发消息验证
 
 ---
 

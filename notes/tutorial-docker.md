@@ -675,6 +675,7 @@ docker compose logs <服务名>    # 看错误日志
 ```
 
 **Gateway 连不上 MySQL**：
+
 ```bash
 # MySQL 可能还没就绪，等几秒再试
 docker compose logs mysql       # 看 MySQL 是否初始化完成

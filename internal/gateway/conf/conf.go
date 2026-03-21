@@ -47,6 +47,7 @@ type HTTPServer struct {
 }
 
 type ACK struct {
+	Enabled       bool
 	RetryInterval int // # of seconds
 	MaxRetries    int
 }
