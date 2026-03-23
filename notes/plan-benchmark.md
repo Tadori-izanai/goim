@@ -123,9 +123,10 @@ func (g *Gateway) track(msgID string, mid int64, msg []byte) {
 ### 数据路径（经过 Gateway）
 
 ```
-bench-chat (sender)                  bench-chat (receiver)
+bench-chat (1 sender)                bench-chat (N receivers)
     │                                      ↑
-    │ POST Gateway /goim/chat              │ WebSocket 连接 Comet
+    │ POST Gateway /goim/chat              │ TCP 连接 Comet
+    │ (round-robin to N receivers)         │
     ↓                                      │
   Gateway → Logic → NATS → Job → Comet ──┘
        │                                   │
@@ -135,25 +136,28 @@ bench-chat (sender)                  bench-chat (receiver)
                               receiver POST /goim/ack/:msg_id (if ACK enabled)
 ```
 
+拓扑：1 个 sender 轮流发给 N 个 receiver。压测端压力极小（1 个 HTTP 发送协程），
+服务端承受全部吞吐压力（JWT 验证 → 查好友 → 写 DB → 推 NATS → ACK 追踪）。
+
 ### 测试矩阵
 
-| 场景 | 用户对数 | 发送速率 | 持续时间 | 关注指标 |
+| 场景 | 接收者数 | 发送速率 | 持续时间 | 关注指标 |
 |------|----------|----------|----------|----------|
-| 低负载 | 50 对 | 10 msg/s | 60s | 延迟开销对比 |
-| 中负载 | 200 对 | 50 msg/s | 60s | 吞吐 + 内存 |
-| 高负载 | 500 对 | 100 msg/s | 120s | pending map 压力 |
+| 低负载 | 200 | 50 msg/s | 60s | 延迟开销对比 |
+| 中负载 | 500 | 200 msg/s | 60s | 吞吐 + 丢失率 + 内存 |
+| 高负载 | 1000 | 500 msg/s | 120s | pending map 压力、丢失率 |
 
-每对用户：A 发消息给 B，B 通过 WebSocket 接收。
-ACK 开启时：B 收到消息后 POST `/goim/ack/:msg_id`。
+1 个 sender 轮流发给 N 个 receiver，每个 receiver 通过 TCP 连接 Comet。
+ACK 开启时：receiver 收到消息后 POST `/goim/ack/:msg_id`。
 
 ### Setup 阶段
 
-压测工具启动时自动完成：
-1. 注册 N×2 个用户（`bench_user_0` ~ `bench_user_999`）
+压测工具启动时自动完成（幂等，并发执行）：
+1. 注册 N+1 个用户（`bench_chat_0` 为 sender，`bench_chat_1` ~ `bench_chat_N` 为 receiver）
 2. 登录获取 token
-3. 两两配对添加好友（0↔1, 2↔3, ...）
-4. 偶数用户连接 WebSocket（接收方）
-5. 开始发送
+3. sender 与每个 receiver 互相添加好友
+4. N 个 receiver 连接 Comet TCP
+5. 排空旧消息（2s drain），然后开始发送
 
 ---
 
@@ -272,27 +276,29 @@ go run benchmarks/bench-mq/main.go \
 ### bench-chat/main.go 流程
 
 ```
-flags: -pairs 50 -rate 10 -duration 60s -gateway localhost:3200 -comet localhost:3102 -ack true
+flags: -receivers 500 -rate 200 -duration 60s -gateway http://localhost:3200 -comet localhost:3101 -ack true
 
-1. Setup:
-   - 注册 pairs*2 个用户
-   - 登录获取 token + wsAddr
-   - 两两添加好友
-2. 连接 pairs 个 WebSocket 接收端（偶数用户）
-3. 启动 sender goroutines:
-   - 奇数用户通过 Gateway /goim/chat 发消息给偶数用户
-   - body 中 content 包含 ts
+1. Setup (幂等, 并发):
+   - 注册 receivers+1 个用户 (bench_chat_0 为 sender)
+   - 登录获取 token
+   - sender 与每个 receiver 互相添加好友
+2. N 个 receiver 连接 Comet TCP
+3. 排空旧消息 (2s drain, 旧消息仍 ACK)
+4. 启动 1 个 sender goroutine:
+   - 轮流发给 N 个 receiver
+   - body.content = UnixNano 时间戳
    - 按 rate 速率均匀发送
-4. 每个 receiver 收到消息后:
+5. 每个 receiver 收到消息后:
+   - ACK (停止重试)
+   - sync.Map 去重 (按 msg_id)
    - 解析 content 中的 ts
    - metrics.RecordLatency(ts)
-   - if ack: POST /goim/ack/:msg_id
-5. 结束后 Report()
+6. 结束后 Report()
 ```
 
 ```sh
 go run benchmarks/bench-chat/main.go \
-    -pairs 50 -rate 10 -duration 60s \
+    -receivers 500 -rate 200 -duration 60s \
     -gateway http://localhost:3200 -comet localhost:3101 -ack=true
 ```
 

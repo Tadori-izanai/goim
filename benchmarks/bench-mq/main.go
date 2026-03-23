@@ -50,8 +50,8 @@ func main() {
 	metrics := pkg.NewMetrics()
 	// Auto sample: keep ~100K latency points max to avoid OOM
 	expectedTotal := int64(*conns) * int64(*rate) * int64(duration.Seconds())
-	if expectedTotal > 100000 {
-		metrics.SetSampleRate(expectedTotal / 100000)
+	if expectedTotal > 1000000 {
+		metrics.SetSampleRate(expectedTotal / 1000000)
 	}
 
 	// 1. connect receivers

@@ -20,12 +20,12 @@ import (
 const OpSingleChatMsg = int32(2001)
 
 var (
-	pairs   = flag.Int("pairs", 50, "number of user pairs")
-	rate    = flag.Int("rate", 10, "messages per second")
-	dur     = flag.Duration("duration", 60*time.Second, "test duration")
-	gateway = flag.String("gateway", "http://localhost:3200", "Gateway HTTP address")
-	comet   = flag.String("comet", "localhost:3101", "Comet TCP address")
-	ackFlag = flag.Bool("ack", true, "enable ACK")
+	receivers = flag.Int("receivers", 500, "number of receivers (1 sender → N receivers)")
+	rate      = flag.Int("rate", 100, "messages per second")
+	dur       = flag.Duration("duration", 60*time.Second, "test duration")
+	gwAddr    = flag.String("gateway", "http://localhost:3200", "Gateway HTTP address")
+	cometAddr = flag.String("comet", "localhost:3101", "Comet TCP address")
+	ackFlag   = flag.Bool("ack", true, "enable ACK")
 )
 
 var httpClient = &http.Client{
@@ -48,29 +48,33 @@ type benchUser struct {
 
 func main() {
 	flag.Parse()
-	log.Printf("bench-chat: pairs=%d rate=%d duration=%s ack=%v", *pairs, *rate, *dur, *ackFlag)
+	log.Printf("bench-chat: receivers=%d rate=%d duration=%s ack=%v", *receivers, *rate, *dur, *ackFlag)
 
-	// 1. Setup: register, login, add friends (idempotent)
-	users := setup(*pairs * 2)
-	log.Printf("setup complete: %d users ready", len(users))
+	// 1. Setup: register/login 1 sender + N receivers, add friends (idempotent)
+	totalUsers := 1 + *receivers
+	users := setupUsers(totalUsers)
+	sender := users[0]
+	recvUsers := users[1:]
+	setupFriends(sender, recvUsers)
+	log.Printf("setup complete: 1 sender + %d receivers", *receivers)
 
 	metrics := pkg.NewMetrics()
-	var seen sync.Map // msg_id dedup: ACK retries cause duplicate deliveries
+	var seen sync.Map
+	var testStarted atomic.Bool
 
-	// 2. Connect receivers (odd-indexed) via TCP
+	// 2. Connect all receivers via TCP
 	var wg sync.WaitGroup
-	clients := make([]*pkg.TcpClient, 0, *pairs)
-	for i := 0; i < *pairs; i++ {
-		receiver := users[i*2+1]
-		c, err := pkg.NewTcpClient(*comet, receiver.ID, "", []int32{OpSingleChatMsg})
+	clients := make([]*pkg.TcpClient, 0, *receivers)
+	for i := 0; i < *receivers; i++ {
+		c, err := pkg.NewTcpClient(*cometAddr, recvUsers[i].ID, "", []int32{OpSingleChatMsg})
 		if err != nil {
-			log.Fatalf("connect receiver %d (mid=%d): %v", i, receiver.ID, err)
+			log.Fatalf("connect receiver %d (mid=%d): %v", i, recvUsers[i].ID, err)
 		}
 		clients = append(clients, c)
 		wg.Add(1)
-		go func() {
+		go func(tc *pkg.TcpClient) {
 			defer wg.Done()
-			c.Receive(func(op int32, body []byte) {
+			tc.Receive(func(op int32, body []byte) {
 				if op != OpSingleChatMsg {
 					return
 				}
@@ -81,11 +85,14 @@ func main() {
 				if err := json.Unmarshal(body, &msg); err != nil {
 					return
 				}
-				// always ACK to stop retries
+				// always ACK to stop retries (including old messages)
 				if *ackFlag && msg.MsgID != "" {
 					go ackMsg(msg.MsgID)
 				}
-				// dedup: only record latency on first delivery
+				if !testStarted.Load() {
+					return
+				}
+				// dedup
 				if msg.MsgID != "" {
 					if _, loaded := seen.LoadOrStore(msg.MsgID, struct{}{}); loaded {
 						return
@@ -97,14 +104,19 @@ func main() {
 				}
 				metrics.RecordLatency(ts)
 			})
-		}()
+		}(c)
 	}
-	log.Printf("all %d receivers connected", *pairs)
+	log.Printf("all %d receivers connected", *receivers)
+
+	// drain old messages
+	log.Println("draining old messages...")
+	time.Sleep(2 * time.Second)
+	testStarted.Store(true)
 
 	// 3. Start live report
 	metrics.StartLiveReport(5 * time.Second)
 
-	// 4. Send messages: round-robin across pairs
+	// 4. Send messages: 1 sender round-robin to N receivers
 	var seq atomic.Int64
 	stopCh := make(chan struct{})
 	go func() {
@@ -116,11 +128,10 @@ func main() {
 			case <-stopCh:
 				return
 			case <-ticker.C:
-				idx := int(seq.Add(1)-1) % *pairs
-				sender := users[idx*2]
-				receiver := users[idx*2+1]
+				idx := int(seq.Add(1)-1) % *receivers
+				to := recvUsers[idx]
 				ts := time.Now().UnixNano()
-				go sendChat(sender.Token, receiver.ID, strconv.FormatInt(ts, 10), metrics)
+				go sendChat(sender.Token, to.ID, strconv.FormatInt(ts, 10), metrics)
 			}
 		}
 	}()
@@ -129,7 +140,7 @@ func main() {
 	time.Sleep(*dur)
 	close(stopCh)
 	log.Println("sending stopped, waiting for in-flight messages...")
-	time.Sleep(2 * time.Second)
+	time.Sleep(3 * time.Second)
 
 	for _, c := range clients {
 		c.Close()
@@ -138,13 +149,12 @@ func main() {
 	metrics.Report()
 }
 
-// setup registers and logs in users, adds friend pairs. Idempotent. Concurrent.
-func setup(n int) []benchUser {
-	users := make([]benchUser, n)
-	sem := make(chan struct{}, 64) // concurrency limit
-	var wg sync.WaitGroup
+// --- Setup (idempotent, concurrent) ---
 
-	// phase 1: register + login concurrently
+func setupUsers(n int) []benchUser {
+	users := make([]benchUser, n)
+	sem := make(chan struct{}, 64)
+	var wg sync.WaitGroup
 	for i := 0; i < n; i++ {
 		wg.Add(1)
 		go func(idx int) {
@@ -162,25 +172,28 @@ func setup(n int) []benchUser {
 		}(i)
 	}
 	wg.Wait()
+	return users
+}
 
-	// phase 2: add friends concurrently
-	for i := 0; i < n; i += 2 {
+func setupFriends(sender benchUser, recvUsers []benchUser) {
+	sem := make(chan struct{}, 64)
+	var wg sync.WaitGroup
+	for i := range recvUsers {
 		wg.Add(2)
 		go func(idx int) {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			addFriend(users[idx].Token, users[idx+1].ID)
+			addFriend(sender.Token, recvUsers[idx].ID)
 		}(i)
 		go func(idx int) {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			addFriend(users[idx+1].Token, users[idx].ID)
+			addFriend(recvUsers[idx].Token, sender.ID)
 		}(i)
 	}
 	wg.Wait()
-	return users
 }
 
 // --- Gateway API helpers ---
@@ -192,7 +205,7 @@ type apiResp struct {
 
 func register(username, password string) {
 	body, _ := json.Marshal(map[string]string{"username": username, "password": password})
-	resp, err := httpClient.Post(*gateway+"/goim/auth/register", "application/json", bytes.NewReader(body))
+	resp, err := httpClient.Post(*gwAddr+"/goim/auth/register", "application/json", bytes.NewReader(body))
 	if err != nil {
 		return
 	}
@@ -202,7 +215,7 @@ func register(username, password string) {
 
 func login(username, password string) (int64, string, error) {
 	body, _ := json.Marshal(map[string]string{"username": username, "password": password})
-	resp, err := httpClient.Post(*gateway+"/goim/auth/login", "application/json", bytes.NewReader(body))
+	resp, err := httpClient.Post(*gwAddr+"/goim/auth/login", "application/json", bytes.NewReader(body))
 	if err != nil {
 		return 0, "", err
 	}
@@ -226,7 +239,7 @@ func login(username, password string) (int64, string, error) {
 }
 
 func addFriend(token string, friendID int64) {
-	url := fmt.Sprintf("%s/goim/friend/%d", *gateway, friendID)
+	url := fmt.Sprintf("%s/goim/friend/%d", *gwAddr, friendID)
 	req, _ := http.NewRequest("POST", url, nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	resp, err := httpClient.Do(req)
@@ -243,7 +256,7 @@ func sendChat(token string, toID int64, content string, m *pkg.Metrics) {
 		"content_type": 1,
 		"content":      content,
 	})
-	req, _ := http.NewRequest("POST", *gateway+"/goim/chat", bytes.NewReader(body))
+	req, _ := http.NewRequest("POST", *gwAddr+"/goim/chat", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := httpClient.Do(req)
@@ -256,7 +269,7 @@ func sendChat(token string, toID int64, content string, m *pkg.Metrics) {
 }
 
 func ackMsg(msgID string) {
-	resp, err := httpClient.Post(*gateway+"/goim/ack/"+msgID, "", nil)
+	resp, err := httpClient.Post(*gwAddr+"/goim/ack/"+msgID, "", nil)
 	if err != nil {
 		return
 	}
