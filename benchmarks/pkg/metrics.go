@@ -12,12 +12,13 @@ import (
 
 // Metrics collects latency, throughput, and loss statistics for benchmarks.
 type Metrics struct {
-	latencies []int64 // nanoseconds
-	sent      atomic.Int64
-	received  atomic.Int64
-	mu        sync.Mutex
-	start     time.Time
-	stopCh    chan struct{}
+	latencies  []int64 // nanoseconds (sampled)
+	sent       atomic.Int64
+	received   atomic.Int64
+	sampleRate int64 // record 1 in N latencies, 0 means record all
+	mu         sync.Mutex
+	start      time.Time
+	stopCh     chan struct{}
 }
 
 func NewMetrics() *Metrics {
@@ -27,16 +28,24 @@ func NewMetrics() *Metrics {
 	}
 }
 
+// SetSampleRate sets latency sampling to 1-in-N. 0 or 1 means record all.
+func (m *Metrics) SetSampleRate(n int64) {
+	m.sampleRate = n
+}
+
 // RecordLatency records a latency sample. sendTsNano is the sender's time.Now().UnixNano().
 func (m *Metrics) RecordLatency(sendTsNano int64) {
 	lat := time.Now().UnixNano() - sendTsNano
 	if lat < 0 {
 		lat = 0
 	}
+	cnt := m.received.Add(1)
+	if m.sampleRate > 1 && cnt%m.sampleRate != 0 {
+		return
+	}
 	m.mu.Lock()
 	m.latencies = append(m.latencies, lat)
 	m.mu.Unlock()
-	m.received.Add(1)
 }
 
 func (m *Metrics) IncSent()                 { m.sent.Add(1) }
@@ -110,7 +119,7 @@ func (m *Metrics) Report() {
 
 	if len(lats) > 0 {
 		fmt.Println()
-		fmt.Println("  Latency (ms):")
+		fmt.Printf("  Latency (ms):  [sampled %d points]\n", len(lats))
 		fmt.Printf("    P50:   %.1f\n", percentile(lats, 0.50))
 		fmt.Printf("    P95:   %.1f\n", percentile(lats, 0.95))
 		fmt.Printf("    P99:   %.1f\n", percentile(lats, 0.99))

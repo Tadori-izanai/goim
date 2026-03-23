@@ -3,6 +3,8 @@ FROM golang:1.24-alpine AS builder
 # 安装 git（部分依赖需要）
 RUN apk add --no-cache git
 
+ENV GOPROXY=https://goproxy.cn,direct
+
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download

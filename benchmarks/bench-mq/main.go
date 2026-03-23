@@ -48,6 +48,11 @@ func main() {
 	log.Printf("bench-mq: conns=%d rate=%d duration=%s", *conns, *rate, *duration)
 
 	metrics := pkg.NewMetrics()
+	// Auto sample: keep ~100K latency points max to avoid OOM
+	expectedTotal := int64(*conns) * int64(*rate) * int64(duration.Seconds())
+	if expectedTotal > 100000 {
+		metrics.SetSampleRate(expectedTotal / 100000)
+	}
 
 	// 1. connect receivers
 	var wg sync.WaitGroup
