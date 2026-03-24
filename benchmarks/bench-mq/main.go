@@ -96,13 +96,14 @@ func main() {
 				s := seq.Add(1)
 				msg, _ := json.Marshal(&benchMsg{Seq: s, Ts: time.Now().UnixNano()})
 				go func() {
+					metrics.IncSentGroup(int64(*conns))
 					resp, err := httpClient.Post(url, "application/json", bytes.NewReader(msg))
 					if err != nil {
+						//metrics.IncSentGroup(-int64(*conns))
 						return
 					}
 					io.Copy(io.Discard, resp.Body)
 					resp.Body.Close()
-					metrics.IncSentGroup(int64(*conns))
 				}()
 			}
 		}

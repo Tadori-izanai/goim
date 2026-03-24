@@ -286,13 +286,14 @@ func sendGroupChat(token string, groupID int64, content string, m *pkg.Metrics) 
 	req, _ := http.NewRequest("POST", url, bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
+	m.IncSentGroup(int64(*members))
 	resp, err := httpClient.Do(req)
 	if err != nil {
+		//m.IncSentGroup(-int64(*members))
 		return
 	}
 	io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
-	m.IncSentGroup(int64(*members))
 }
 
 // --- Fanout report ---

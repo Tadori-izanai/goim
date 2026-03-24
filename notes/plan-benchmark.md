@@ -123,41 +123,61 @@ func (g *Gateway) track(msgID string, mid int64, msg []byte) {
 ### 数据路径（经过 Gateway）
 
 ```
-bench-chat (1 sender)                bench-chat (N receivers)
-    │                                      ↑
-    │ POST Gateway /goim/chat              │ TCP 连接 Comet
-    │ (round-robin to N receivers)         │
-    ↓                                      │
-  Gateway → Logic → NATS → Job → Comet ──┘
-       │                                   │
-       └── ack.Track() (if enabled)        │
-           pending map 跟踪                 │
-                                           │
-                              receiver POST /goim/ack/:msg_id (if ACK enabled)
+bench-mq (背景负载)                  bench-mq (receivers)
+    │ POST Logic /goim/push/room        ↑ TCP 连接 Comet (5000 conns)
+    ↓                                   │
+  Logic → NATS → Job → Comet ──────────┘
+
+bench-chat (N senders)               bench-chat (N receivers)
+    │ POST Gateway /goim/chat            ↑ TCP 连接 Comet
+    ↓                                    │
+  Gateway → Logic → NATS → Job → Comet ─┘
+       │                                 │
+       └── ack.Track() (if enabled)      │
+           pending map 跟踪              │
+                                         │
+                            receiver POST /goim/ack/:msg_id (if ACK enabled)
 ```
 
-拓扑：1 个 sender 轮流发给 N 个 receiver。压测端压力极小（1 个 HTTP 发送协程），
-服务端承受全部吞吐压力（JWT 验证 → 查好友 → 写 DB → 推 NATS → ACK 追踪）。
+策略：先启动 bench-mq 造背景高吞吐负载（5000 连接 × 200 msg/s），
+再启动 bench-chat（200 对 × 50 msg/s）测 ACK 开/关差异。
+这样服务端承受高吞吐压力，而 bench-chat 的压测端 HTTP 请求量小，
+ACK 开/关的对比公平（压测端不是瓶颈）。
 
 ### 测试矩阵
 
-| 场景 | 接收者数 | 发送速率 | 持续时间 | 关注指标 |
-|------|----------|----------|----------|----------|
-| 低负载 | 200 | 50 msg/s | 60s | 延迟开销对比 |
-| 中负载 | 500 | 200 msg/s | 60s | 吞吐 + 丢失率 + 内存 |
-| 高负载 | 1000 | 500 msg/s | 120s | pending map 压力、丢失率 |
+| 场景 | 背景负载 (bench-mq) | bench-chat 对数 | 发送速率 | 持续时间 | 关注指标 |
+|------|---------------------|-----------------|----------|----------|----------|
+| 中负载 | 5000 conn × 200 msg/s | 200 对 | 50 msg/s | 60s | 延迟开销 + 丢失率 |
+| 高负载 | 5000 conn × 200 msg/s | 500 对 | 100 msg/s | 60s | 丢失率 + 内存 |
 
-1 个 sender 轮流发给 N 个 receiver，每个 receiver 通过 TCP 连接 Comet。
+N 对用户：sender[i] 发给 receiver[i]，每个 receiver 通过 TCP 连接 Comet。
 ACK 开启时：receiver 收到消息后 POST `/goim/ack/:msg_id`。
 
 ### Setup 阶段
 
 压测工具启动时自动完成（幂等，并发执行）：
-1. 注册 N+1 个用户（`bench_chat_0` 为 sender，`bench_chat_1` ~ `bench_chat_N` 为 receiver）
+1. 注册 N×2 个用户（`bench_chat_0` ~ `bench_chat_{2N-1}`）
 2. 登录获取 token
-3. sender 与每个 receiver 互相添加好友
+3. 两两配对添加好友（0↔1, 2↔3, ...）
 4. N 个 receiver 连接 Comet TCP
 5. 排空旧消息（2s drain），然后开始发送
+
+### 运行方式
+
+使用 `bench-chat-with-load.sh` 脚本自动编排：
+
+```sh
+# ACK 开启
+./benchmarks/bench-chat-with-load.sh -ack true \
+  -comet <内网IP>:3101 -logic <内网IP>:3111 -gateway http://<内网IP>:3200
+
+# ACK 关闭
+./benchmarks/bench-chat-with-load.sh -ack false \
+  -comet <内网IP>:3101 -logic <内网IP>:3111 -gateway http://<内网IP>:3200
+```
+
+脚本流程：bench-mq 先启动 → 等 15s 建连稳定 → bench-chat 启动 → bench-chat 结束 → 等 bench-mq 结束
 
 ---
 
@@ -276,16 +296,15 @@ go run benchmarks/bench-mq/main.go \
 ### bench-chat/main.go 流程
 
 ```
-flags: -receivers 500 -rate 200 -duration 60s -gateway http://localhost:3200 -comet localhost:3101 -ack true
+flags: -pairs 200 -rate 50 -duration 60s -gateway http://localhost:3200 -comet localhost:3101 -ack true
 
 1. Setup (幂等, 并发):
-   - 注册 receivers+1 个用户 (bench_chat_0 为 sender)
+   - 注册 pairs×2 个用户
    - 登录获取 token
-   - sender 与每个 receiver 互相添加好友
+   - 两两配对添加好友 (0↔1, 2↔3, ...)
 2. N 个 receiver 连接 Comet TCP
 3. 排空旧消息 (2s drain, 旧消息仍 ACK)
-4. 启动 1 个 sender goroutine:
-   - 轮流发给 N 个 receiver
+4. sender goroutines 轮流发送:
    - body.content = UnixNano 时间戳
    - 按 rate 速率均匀发送
 5. 每个 receiver 收到消息后:
@@ -296,10 +315,32 @@ flags: -receivers 500 -rate 200 -duration 60s -gateway http://localhost:3200 -co
 6. 结束后 Report()
 ```
 
+配合 bench-mq 背景负载使用：
+
 ```sh
-go run benchmarks/bench-chat/main.go \
-    -receivers 500 -rate 200 -duration 60s \
-    -gateway http://localhost:3200 -comet localhost:3101 -ack=true
+# ACK 开启
+./benchmarks/bench-chat-with-load.sh -ack true \
+    -comet <内网IP>:3101 -logic <内网IP>:3111 -gateway http://<内网IP>:3200
+
+# ACK 关闭
+./benchmarks/bench-chat-with-load.sh -ack false \
+    -comet <内网IP>:3101 -logic <内网IP>:3111 -gateway http://<内网IP>:3200
+```
+
+```sh
+  # ACK 开启
+  go run benchmarks/bench-chat-load/main.go \
+    -bg-conns 5000 -bg-rate 200 \
+    -pairs 200 -rate 50 -duration 60s \
+    -comet 10.206.0.3:3101 -logic 10.206.0.3:3111 \
+    -gateway http://10.206.0.3:3200 -ack=true
+
+  # ACK 关闭
+  go run benchmarks/bench-chat-load/main.go \
+    -bg-conns 8000 -bg-rate 300 \
+    -pairs 100 -rate 50 -duration 60s \
+    -comet localhost:3101 -logic localhost:3111 \
+    -gateway http://localhost:3200 -ack=false
 ```
 
 ### bench-fanout/main.go 流程
@@ -381,14 +422,12 @@ go run benchmarks/bench-mq/main.go \
   -conns 500 -rate 10 -duration 60s \
   -comet localhost:3101 -logic localhost:3111
 
-# 实验 2：ACK 对比（本地，低负载）
-go run benchmarks/bench-chat/main.go \
-  -pairs 50 -rate 10 -duration 60s \
-  -gateway localhost:3200 -comet localhost:3102 -ack=true
+# 实验 2：ACK 对比（使用背景负载脚本）
+./benchmarks/bench-chat-with-load.sh -ack true \
+  -comet localhost:3101 -logic localhost:3111 -gateway http://localhost:3200
 
-go run benchmarks/bench-chat/main.go \
-  -pairs 50 -rate 10 -duration 60s \
-  -gateway localhost:3200 -comet localhost:3102 -ack=false
+./benchmarks/bench-chat-with-load.sh -ack false \
+  -comet localhost:3101 -logic localhost:3111 -gateway http://localhost:3200
 
 # 实验 3：群聊扇出（本地）
 go run benchmarks/bench-fanout/main.go \
