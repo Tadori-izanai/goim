@@ -84,7 +84,7 @@ func main() {
 				}
 				if *ackFlag && msg.MsgID != "" {
 					//go ackMsg(msg.MsgID)
-					ackMsg(msg.MsgID)
+					go ackMsg(msg.MsgID)
 				}
 				if !testStarted.Load() {
 					return

@@ -328,16 +328,16 @@ flags: -pairs 200 -rate 50 -duration 60s -gateway http://localhost:3200 -comet l
 ```
 
 ```sh
-  # ACK 开启
-  go run benchmarks/bench-chat-load/main.go \
-    -bg-conns 5000 -bg-rate 200 \
+# ACK 开启
+go run benchmarks/bench-chat-load/main.go \
+    -bg-conns 10000 -bg-rate 250 \
     -pairs 200 -rate 50 -duration 60s \
     -comet 10.206.0.3:3101 -logic 10.206.0.3:3111 \
     -gateway http://10.206.0.3:3200 -ack=true
 
-  # ACK 关闭
-  go run benchmarks/bench-chat-load/main.go \
-    -bg-conns 8000 -bg-rate 300 \
+# ACK 关闭
+go run benchmarks/bench-chat-load/main.go \
+    -bg-conns 10000 -bg-rate 250 \
     -pairs 100 -rate 50 -duration 60s \
     -comet localhost:3101 -logic localhost:3111 \
     -gateway http://localhost:3200 -ack=false
@@ -431,8 +431,8 @@ go run benchmarks/bench-mq/main.go \
 
 # 实验 3：群聊扇出（本地）
 go run benchmarks/bench-fanout/main.go \
-  -members 10 -rate 10 -duration 30s \
-  -gateway localhost:3200 -comet localhost:3102
+   -members 2 -rate 200 -duration 30s \
+   -gateway http://10.206.0.3:3200 -comet 10.206.0.3:3101
 ```
 
 ## 预期简历产出

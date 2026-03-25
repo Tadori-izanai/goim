@@ -129,7 +129,7 @@ func main() {
 					return
 				}
 				if *ackFlag && msg.MsgID != "" {
-					ackMsg(msg.MsgID)
+					go ackMsg(msg.MsgID)
 				}
 				if !chatStarted.Load() {
 					return
@@ -216,8 +216,8 @@ func main() {
 	// ===== Phase 4: Wait for chat duration, then stop =====
 	time.Sleep(*dur)
 	close(chatStop)
-	log.Println("[phase 4] chat sending stopped, waiting 3s for in-flight...")
-	time.Sleep(3 * time.Second)
+	log.Println("[phase 4] chat sending stopped, waiting 15s for in-flight...")
+	time.Sleep(15 * time.Second)
 
 	// stop background
 	close(bgStop)
